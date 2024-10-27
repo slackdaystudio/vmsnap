@@ -1,0 +1,34 @@
+{
+  "name": "vmsnap",
+  "version": "0.0.1-alpha",
+  "description": "A Node based backup and backup rotation tool.",
+  "main": "index.js",
+  "scripts": {
+    "nos": "node --experimental-json-modules --unhandled-rejections=strict nos-wizard/index.js",
+    "test": "echo \"No tests specified\"",
+    "lint": "npx eslint *.js",
+    "check-format": "npx prettier --check \"*.js\"",
+    "format": "npx prettier --write \"*.js\""
+  },
+  "author": "Philip J. Guinchard",
+  "license": "MIT",
+  "dependencies": {
+    "command-exists": "^1.2.9",
+    "dayjs": "^1.11.13",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/eslint-parser": "^7.25.1",
+    "@babel/preset-react": "^7.24.7",
+    "@types/yargs": "^17.0.33",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "husky": "^9.1.6",
+    "lint-staged": "^15.2.9",
+    "prettier": "^3.3.3",
+    "winston": "^3.14.2"
+  },
+  "type": "module"
+}
