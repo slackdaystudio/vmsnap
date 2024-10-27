@@ -4,7 +4,6 @@
   "description": "A Node based backup and backup rotation tool.",
   "main": "index.js",
   "scripts": {
-    "nos": "node --experimental-json-modules --unhandled-rejections=strict nos-wizard/index.js",
     "test": "echo \"No tests specified\"",
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
