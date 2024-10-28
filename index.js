@@ -4,17 +4,20 @@
  * virtnbdbackup utility.  It relies on the virsh and qemu-img utilities as well
  * so please make sure you have them installed.
  *
- * Usage: node index.js --domains=<domain> --output=<output>
+ * Usage: node index.js --domains=<domain> --output=<output directory>
  *
  * --domains: Comma-separated list of domains to backup.  Use '*' to backup all
  * domains.
  * --output: Output directory for the backups.  Only supply the root of where
  * you want the backups to go.  The script will create a directory for each
  * domain and a subdirectory for each year/month.
+ * --prune=<true|false> (Optional), this will delete the previous month's
+ * backups if it's the middle of the month and the backups exist.
  *
  * @author: Philip J. Guinchard <phil.guinchard@gmail.com>
  */
 
+import { rm, stat } from 'fs/promises';
 import { exec, spawn } from 'child_process';
 import util from 'util';
 import dayjs from 'dayjs';
@@ -44,7 +47,7 @@ const checkDependencies = async () => {
     await commandExists(BACKUP);
   } catch (error) {
     throw new Error(
-      'Missing dependencies: check if virsh, qemu-img and virtnbdbackup are installed',
+      `Missing dependencies: check for ${VIRSH}, ${QEMU_IMG} and ${BACKUP}`,
     );
   }
 };
@@ -56,6 +59,15 @@ const checkDependencies = async () => {
  */
 const getBackupFolder = () => {
   return dayjs().format('YYYY-MM');
+};
+
+/**
+ * Returns last months backup folder name.
+ *
+ * @returns {string} Previous month in the format YYYY-MM
+ */
+const getPreviousBackupFolder = () => {
+  return dayjs().subtract(1, 'month').format('YYYY-MM');
 };
 
 /**
@@ -133,7 +145,7 @@ const backup = async (domain) => {
       '-S',
       '--noprogress',
       '-d',
-      `${domain}`,
+      domain,
       '-l',
       'auto',
       '-o',
@@ -146,23 +158,146 @@ const backup = async (domain) => {
       stdio: 'inherit',
     });
 
-    child.stdout.setEncoding('utf8');
+    if (child.stdout) {
+      child.stdout.setEncoding('utf8');
 
-    child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (data) => {
+        console.log(data);
+      });
+    }
 
-    child.stdout.on('data', (data) => {
-      console.log(data);
-    });
+    if (child.stderr) {
+      child.stderr.setEncoding('utf8');
 
-    child.stderr.on('data', (data) => {
-      console.error(data);
-    });
+      child.stderr.on('data', (data) => {
+        console.error(data);
+      });
+    }
 
     child.on('close', (code) => {
       console.log(`closing code: ${code}`);
     });
   } else {
     console.error(`${domain} does not exist`);
+  }
+};
+
+/**
+ * Lists all virtual disks for a given domain.
+ *
+ * @param {string} domain the domain to find virtual disks for
+ * @returns {Promise<Array<string>} List of virtual disks
+ */
+const findVirtualDisks = async (domain) => {
+  const command = [VIRSH, 'domblklist', domain, '--details'];
+
+  const { stdout, stderr } = await localExec(command.join(' '));
+
+  if (stderr) {
+    throw new Error(stderr);
+  }
+
+  return stdout
+    .split('\n')
+    .map((line) => {
+      const disks = line.split(' ').filter((d) => d.length > 0);
+
+      // Check if the disk is a virtual disk and not something else like a cdrom
+      if (disks.length >= 4 && disks[2].startsWith('vd')) {
+        return disks[disks.length - 1];
+      }
+    })
+    .filter((d) => d !== undefined);
+};
+
+/**
+ * Scrubs a domain of any bitmaps that may be left behind from the previous
+ * month's backups.
+ *
+ * @param {string} domain the domain to cleanup bitmaps for
+ */
+const cleanupBitmaps = async (domain) => {
+  for (const disk of await findVirtualDisks(domain)) {
+    const command = [QEMU_IMG, 'info', '-f', 'qcow2', disk, '--output=json'];
+
+    const { stdout, stderr } = await localExec(command.join(' '));
+
+    if (stderr) {
+      throw new Error(stderr);
+    }
+
+    const domainConfig = JSON.parse(stdout);
+
+    const bitmaps = domainConfig['format-specific']['data']['bitmaps'] || [];
+
+    if (bitmaps.length === 0) {
+      continue;
+    }
+
+    for (const bitmap of bitmaps) {
+      const command = [
+        QEMU_IMG,
+        'bitmap',
+        '--remove',
+        '-f',
+        'qcow2',
+        disk,
+        bitmap.name,
+      ];
+
+      const { stderr } = await localExec(command.join(' '));
+
+      if (stderr) {
+        throw new Error(stderr);
+      }
+    }
+  }
+};
+
+/**
+ * Returns a list of checkpoints for a given domain.
+ *
+ * @param {string} domain the domain to find checkpoints for
+ * @returns
+ */
+const findCheckpoints = async (domain) => {
+  const command = [VIRSH, 'checkpoint-list', domain, '--name'];
+
+  const { stdout, stderr } = await localExec(command.join(' '));
+
+  if (stderr) {
+    throw new Error(stderr);
+  }
+
+  return stdout.split('\n').filter((c) => c.trim() !== '');
+};
+
+/**
+ * Removes all checkpoints from a given domain.
+ *
+ * @param {string} domain the domain to cleanup checkpoints for
+ */
+const cleanupCheckpoints = async (domain) => {
+  const checkpoints = await findCheckpoints(domain);
+
+  if (checkpoints.length === 0) {
+    return;
+  }
+
+  for (const checkpoint of checkpoints) {
+    const command = [
+      VIRSH,
+      'checkpoint-delete',
+      domain,
+      checkpoint,
+      '--metadata',
+    ];
+
+    const { stderr } = await localExec(command.join(' '));
+
+    if (stderr) {
+      throw new Error(stderr);
+    }
   }
 };
 
@@ -179,7 +314,32 @@ const main = async () => {
   }
 
   for (const domain of await parseDomains()) {
+    const lastMonthsBackupsDir = `${argv.output}/${domain}/${getPreviousBackupFolder()}`;
+
+    // If it's the first of the month, run a cleanup for any the bitmaps and
+    // checkpoints found for the domain.
+    if (dayjs().date() === 1) {
+      console.log('First of the month, running cleanup');
+
+      await cleanupCheckpoints(domain);
+
+      await cleanupBitmaps(domain);
+    }
+
     await backup(domain);
+
+    // If it's the middle of the month, run a cleanup of the previous month's
+    // backups if they exist and the prune flag is set.
+    if (
+      argv.prune === 'true' &&
+      dayjs().date() >= 15 &&
+      (await stat(lastMonthsBackupsDir))
+    ) {
+      console.log('Middle of the month, running cleanup');
+
+      // Delete last months backups
+      await rm(lastMonthsBackupsDir, { recursive: true, force: true });
+    }
   }
 
   process.exit(0);
