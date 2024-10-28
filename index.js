@@ -17,6 +17,7 @@
  * @author: Philip J. Guinchard <phil.guinchard@gmail.com>
  */
 
+import { exit } from 'process';
 import { access, rm } from 'fs/promises';
 import { exec, spawn } from 'child_process';
 import util from 'util';
@@ -175,7 +176,9 @@ const backup = async (domain) => {
     }
 
     child.on('close', (code) => {
-      console.log(`closing code: ${code}`);
+      if (code !== 0) {
+        throw new Error(`Backup for ${domain} failed with code ${code}`);
+      }
     });
   } else {
     console.error(`${domain} does not exist`);
@@ -351,15 +354,18 @@ const main = async () => {
       await rm(lastMonthsBackupsDir, { recursive: true, force: true });
     }
   }
-
-  process.exit(0);
 };
 
 // Check dependencies and run main function
-checkDependencies()
-  .then(() => main())
-  .catch((err) => {
-    console.error(err);
+checkDependencies().catch((err) => {
+  console.error(err);
 
-    process.exit(1);
-  });
+  exit(1);
+});
+
+// Run the main function
+main().catch((err) => {
+  console.error(err);
+
+  exit(2);
+});
