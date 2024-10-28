@@ -17,7 +17,7 @@
  * @author: Philip J. Guinchard <phil.guinchard@gmail.com>
  */
 
-import { rm, stat } from 'fs/promises';
+import { access, rm } from 'fs/promises';
 import { exec, spawn } from 'child_process';
 import util from 'util';
 import dayjs from 'dayjs';
@@ -301,6 +301,16 @@ const cleanupCheckpoints = async (domain) => {
   }
 };
 
+const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
+  try {
+    await access(lastMonthsBackupsDir);
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 /**
  * Main function
  */
@@ -333,7 +343,7 @@ const main = async () => {
     if (
       argv.prune === 'true' &&
       dayjs().date() >= 15 &&
-      (await stat(lastMonthsBackupsDir))
+      (await isLastMonthsBackupCreated(lastMonthsBackupsDir))
     ) {
       console.log('Middle of the month, running cleanup');
 
