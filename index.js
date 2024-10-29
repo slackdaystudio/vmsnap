@@ -66,7 +66,7 @@ const main = async () => {
 
     // If it's the first of the month, run a cleanup for any the bitmaps and
     // checkpoints found for the domain if pruning is flagged on.
-    if (argv.prune === 'true' && dayjs().date() === 1) {
+    if (dayjs().date() === 1) {
       logger.info('First of the month, running cleanup');
 
       await cleanupCheckpoints(domain);

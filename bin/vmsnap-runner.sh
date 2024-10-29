@@ -17,4 +17,4 @@ if [ -z "${VMSNAP}" ]; then
     exit 1
 fi
 
-node $(which vmsnap) --domains="${1}" --output="${2}" --prune="${3}"
+node ${VMSNAP} --domains="${1}" --output="${2}" --prune="$3:=false"
