@@ -25,10 +25,6 @@ To install VMSnap, follow these steps:
     ```sh
     npm install
     ```
-4. (Optional) Create a symlink for the app runner.
-    ```
-    ln -s <VMSNAP_CHECKOUT>/bin/vmsnap-runner.sh /usr/local/sbin/vmsnap-runner
-    ```
 
 ## Usage
 
@@ -53,6 +49,19 @@ current backup month comes up.
 Turning on pruning means you will have a sliding window of backups between 2-6
 weeks of time, depending on where you are in the backup cycle.
 
+#### Raw Disk Handling
+
+You can turn on raw disk handling by setting `--raw="true"`.  
+
+#### Approving Disks
+
+By default, the script will look for all virtual disks for bitmaps.  You may 
+pass in a list of disks by setting `--approvedDisks="sda"`.
+
+>Tip: The `--approvedDisks` flag also accepts a comma seperated list of disks.
+You may also pass in "*" to backup all found disks.  This is applicable to 
+backing up or scrubbing VMs.
+
 ### Scrubbing
 
 To scrub a VM of checkpoints and bitmaps:
@@ -63,20 +72,6 @@ npm run vmsnap -- --domains="dom1" --scrub="true"
 >Tip: The `--domains` flag also accepts a comma seperated list of domains.  You 
 may also pass in "*" to backup all found VMs.  This is applicable to backing up 
 or scrubbing VMs.
-
-# Runner Usage
-
-The `vmsnap-runner.sh` bash script is designed to be used for crons but may also 
-be used directly from your shell.  It takes three paramaters;
- 1. A domain or comma seperated list of domains
- 2. The location to place the snapshot
- 3. (Optional) true to prune the backups automatically 
-
-For example, this will backup `dom1` and output it to the `tmp` direcory:
-
-```sh
-vmsnap-runner "dom1" "/tmp"
-```
 
 ## Contributing
 

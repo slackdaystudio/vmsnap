@@ -3,7 +3,7 @@ import { logger } from '../index.js';
 
 /**
  * The virsh command functions.
- * 
+ *
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
@@ -91,6 +91,8 @@ const cleanupCheckpoints = async (domain) => {
       '--metadata',
     ];
 
+    logger.info(`Removing checkpoint ${checkpoint} from ${domain}`);
+
     const { stderr } = await asyncExec(command.join(' '));
 
     if (stderr) {
@@ -100,12 +102,42 @@ const cleanupCheckpoints = async (domain) => {
 };
 
 /**
+ * Fetches all disks for a given domain.
+ *
+ * @param {string} domain the domain to find disks for
+ * @returns {Promise<Map<string, string>>} A map of disk names to their paths
+ */
+const fetchAllDisks = async (domain) => {
+  const diskList = new Map();
+
+  const command = [VIRSH, 'domblklist', domain, '--details'];
+
+  const { stdout, stderr } = await asyncExec(command.join(' '));
+
+  if (stderr) {
+    throw new Error(stderr);
+  }
+
+  for (const line of stdout.split('\n')) {
+    const disks = line.split(' ').filter((d) => d.length > 0);
+
+    // Need at least 4 columns to get the disk name
+    if (disks.length >= 4) {
+      diskList.set(disks[4], disks[disks.length - 1].trim());
+    }
+  }
+
+  return diskList;
+};
+
+/**
  * Lists all virtual disks for a given domain.
  *
  * @param {string} domain the domain to find virtual disks for
+ * @param {Array<string>} approvedDisks a list of approved disks to cleanup
  * @returns {Promise<Array<string>} List of virtual disks
  */
-const findVirtualDisks = async (domain) => {
+const findBackupDisks = async (domain, approvedDisks = []) => {
   const command = [VIRSH, 'domblklist', domain, '--details'];
 
   const { stdout, stderr } = await asyncExec(command.join(' '));
@@ -120,7 +152,10 @@ const findVirtualDisks = async (domain) => {
       const disks = line.split(' ').filter((d) => d.length > 0);
 
       // Check if the disk is a virtual disk and not something else like a cdrom
-      if (disks.length >= 4 && disks[2].startsWith('vd')) {
+      if (
+        disks.length >= 4 &&
+        (disks[2].startsWith('vd') || approvedDisks.includes(disks[2]))
+      ) {
         return disks[disks.length - 1];
       }
     })
@@ -131,5 +166,6 @@ export {
   domainExists,
   fetchAllDomains,
   cleanupCheckpoints,
-  findVirtualDisks,
+  fetchAllDisks,
+  findBackupDisks,
 };

@@ -16,7 +16,7 @@ export const BACKUP = 'virtnbdbackup';
  *
  * @param {Promise<string>} domain the domain to backup
  */
-const backup = async (domain, outputDir) => {
+const backup = async (domain, outputDir, raw = false) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 
@@ -33,6 +33,10 @@ const backup = async (domain, outputDir) => {
     '-o',
     `${outputDir}/${domain}/${dayjs().format('YYYY-MM')}`,
   ];
+
+  if (raw) {
+    commandOpts.push('--raw');
+  }
 
   const child = spawn(BACKUP, commandOpts, {
     uid: 0,

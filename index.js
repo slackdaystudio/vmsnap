@@ -1,20 +1,24 @@
 #!/usr/local/bin/node
-import { exit } from 'process';
 import { exec } from 'child_process';
 import util from 'util';
 import { tmpdir } from 'os';
 import { rm } from 'fs/promises';
 import dayjs from 'dayjs';
 import Yargs from 'yargs';
-import { lock, unlock } from 'lockfile';
+import { lock } from 'lockfile';
 import * as winston from 'winston';
-import { cleanupCheckpoints } from './libs/virsh.js';
+import {
+  cleanupCheckpoints,
+  fetchAllDisks,
+  fetchAllDomains,
+} from './libs/virsh.js';
 import { cleanupBitmaps } from './libs/qemu-img.js';
 import {
   checkDependencies,
   getPreviousBackupFolder,
   isLastMonthsBackupCreated,
-  parseDomains,
+  parseArrayParam,
+  releaseLock,
 } from './libs/general.js';
 import { backup } from './libs/libnbdbackup.js';
 
@@ -39,30 +43,35 @@ import { backup } from './libs/libnbdbackup.js';
 /**
  * Error with the domains argument, usually indicates no domains were specified.
  */
-const ERR_DOMAINS = 0;
+const ERR_DOMAINS = 1;
 
 /**
  * Error with the output directory argument, usually indicates no output
  * directory was specified or it doesn't exist.
  */
-const ERR_OUTPUT_DIR = 1;
+const ERR_OUTPUT_DIR = 2;
 
 /**
  * Main error, something went wrong during the main function.
  */
-const ERR_MAIN = 2;
+const ERR_MAIN = 3;
 
 /**
  * Requirements error, something is missing that is required for the script to
  * execute.
  */
-const ERR_REQS = 3;
+const ERR_REQS = 4;
 
 /**
  * Scrub error, something went wrong during the scrubbing of checkpoints and
  * bitmaps.
  */
-const ERR_SCRUB = 4;
+const ERR_SCRUB = 5;
+
+/**
+ * Lock release error, something went wrong releasing the lock file.
+ */
+export const ERR_LOCK_RELEASE = 6;
 
 // Need to promisify exec to use async/await
 export const asyncExec = util.promisify(exec);
@@ -84,7 +93,24 @@ export const logger = winston.createLogger({
 const argv = Yargs(process.argv.slice(2)).argv;
 
 // Lock file for the script
-const lockfile = `${tmpdir()}/vmsnap.lock`;
+export const lockfile = `${tmpdir()}/vmsnap.lock`;
+
+/**
+ * Fetches all domains found on the system.
+ *
+ * @returns {Promise<Array<string>} a list of all domains found on the system
+ */
+const fetchDomains = async () => await fetchAllDomains();
+
+/**
+ * Finds all disks for a domain.
+ *
+ * @param {string} domain the domain to fetch disks for
+ * @returns {Promise<Array<string>>} a list of disks for the domain
+ */
+const fetchDisks = async (domain) => {
+  return await fetchAllDisks(domain).map((d) => d[1]);
+};
 
 /**
  * Performs a backup on one or more VM domains by inspecting passed in command
@@ -99,7 +125,7 @@ const main = async () => {
     throw new Error('No output directory specified', { code: ERR_OUTPUT_DIR });
   }
 
-  for (const domain of await parseDomains(argv.domains)) {
+  for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
     const lastMonthsBackupsDir = `${argv.output}/${domain}/${getPreviousBackupFolder()}`;
 
     // If it's the first of the month, run a cleanup for any the bitmaps and
@@ -109,10 +135,14 @@ const main = async () => {
 
       await cleanupCheckpoints(domain);
 
-      await cleanupBitmaps(domain);
+      await cleanupBitmaps(
+        domain,
+        async () =>
+          await parseArrayParam(argv.approvedDisks, () => fetchDisks(domain)),
+      );
     }
 
-    await backup(domain, argv.output);
+    await backup(domain, argv.output, argv.raw === 'true');
 
     // If it's the middle of the month, run a cleanup of the previous month's
     // backups if they exist and the prune flag is set.
@@ -140,15 +170,23 @@ const scrub = async () => {
     throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
 
+  logger.info('Scrubbing checkpoints and bitmaps');
+
   let scrubbed = false;
 
   try {
-    for (const domain of await parseDomains(argv.domains)) {
-      logger.info(`  - Scrubbing domain: ${domain}`);
+    for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
+      logger.info(`Scrubbing domain: ${domain}`);
 
       await cleanupCheckpoints(domain);
 
-      await cleanupBitmaps(domain);
+      await cleanupBitmaps(
+        domain,
+        await parseArrayParam(
+          argv.approvedDisks,
+          async () => await fetchDisks(domain),
+        ),
+      );
     }
 
     scrubbed = true;
@@ -161,49 +199,36 @@ const scrub = async () => {
   return scrubbed;
 };
 
+// Exit code for the script
+let exitCode = 0;
+
 // Run in a lock to prevent multiple instances from running
 lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
-  /**
-   * Release the lock created by the execution of the script.
-   */
-  const releaseLock = () => {
-    unlock(lockfile, (err) => {
-      if (err) {
-        logger.error(err);
-      }
-    });
-  };
-
-  // Check dependencies
   checkDependencies().catch((err) => {
     logger.error(err);
 
-    releaseLock();
-
-    exit(ERR_REQS);
+    releaseLock(ERR_REQS);
   });
 
   if (argv.scrub === 'true') {
-    logger.info('Scrubbing checkpoints and bitmaps');
-
     scrub()
       .catch((err) => {
         logger.error(err.message);
 
-        exit(ERR_SCRUB);
+        exitCode = err.code || ERR_SCRUB;
       })
       .finally(() => {
-        releaseLock();
+        releaseLock(exitCode);
       });
   } else {
     main()
       .catch((err) => {
         logger.error(err.message);
 
-        exit(ERR_MAIN);
+        exitCode = err.code || ERR_MAIN;
       })
       .finally(() => {
-        releaseLock();
+        releaseLock(exitCode);
       });
   }
 });

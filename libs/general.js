@@ -1,7 +1,10 @@
+import { exit } from 'process';
 import { access } from 'fs/promises';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import { VIRSH, fetchAllDomains } from './virsh.js';
+import { lockfile, logger } from '../index.js';
+import { unlock } from 'lockfile';
+import { VIRSH } from './virsh.js';
 import { QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
 
@@ -36,24 +39,26 @@ const getPreviousBackupFolder = () => {
 };
 
 /**
- * Inspects the --domains CLI argument and returns a list of domains to backup.
- *
- * @returns {Promise<Array<string>>} List of domains to backup
+ * Parses a string parameter for an array.
+ * 
+ * @param {string} param the string param to parse for an array 
+ * @param {function} fetchAll what to call to fetch all the items
+ * @returns {Promise<Array<string>>} the parsed array
  */
-const parseDomains = async (rawDomains) => {
-  let domains = [];
+const parseArrayParam = async (param, fetchAll = async () => []) => {
+  let parsed = [];
 
-  if (rawDomains.indexOf(',') > -1) {
-    domains = rawDomains.split(',');
-  } else if (rawDomains === '*') {
-    domains = await fetchAllDomains();
-  } else if (typeof rawDomains === 'string') {
-    domains.push(rawDomains);
+  if (param.indexOf(',') > -1) {
+    parsed = param.split(',');
+  } else if (param === '*') {
+    parsed = await fetchAll();
+  } else if (typeof param === 'string') {
+    parsed.push(param);
   } else {
-    throw new Error(`Invalid domain name: ${rawDomains}`);
+    throw new Error(`Invalid parameter: ${param}`);
   }
 
-  return domains;
+  return parsed;
 };
 
 /**
@@ -73,9 +78,31 @@ const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
   }
 };
 
+  /**
+   * Release the lock created by the execution of the script.
+   * 
+   * @param {number} exitCode the exit code to use after releasing the lock
+   */
+  const releaseLock = (exitCode) => {
+    if (exitCode === undefined) {
+      logger.info('No exit code provided for lock release');
+    };
+
+    unlock(lockfile, (err) => {
+      if (err) {
+        logger.error(err);
+
+        exit(ERR_LOCK_RELEASE);
+      }
+
+      exit(exitCode);
+    });
+  };
+
 export {
   checkDependencies,
   getPreviousBackupFolder,
-  parseDomains,
+  parseArrayParam,
   isLastMonthsBackupCreated,
+  releaseLock,
 };
