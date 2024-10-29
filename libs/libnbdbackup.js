@@ -6,7 +6,7 @@ import { domainExists } from './virsh.js';
 /**
  * Our functions for interfacing with the virtnbdbackup utility.
  * 
- * @author: Philip J. Guinchard <phil.guinchardard@slackdaystudio.ca>
+ * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
 export const BACKUP = 'virtnbdbackup';

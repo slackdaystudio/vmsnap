@@ -4,7 +4,7 @@ import { logger } from '../index.js';
 /**
  * The virsh command functions.
  * 
- * @author: Philip J. Guinchard <phil.guinchardard@slackdaystudio.ca>
+ * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
 export const VIRSH = 'virsh';

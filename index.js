@@ -36,9 +36,40 @@ import { backup } from './libs/libnbdbackup.js';
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
+/**
+ * Error with the domains argument, usually indicates no domains were specified.
+ */
+const ERR_DOMAINS = 0;
+
+/**
+ * Error with the output directory argument, usually indicates no output
+ * directory was specified or it doesn't exist.
+ */
+const ERR_OUTPUT_DIR = 1;
+
+/**
+ * Main error, something went wrong during the main function.
+ */
+const ERR_MAIN = 2;
+
+/**
+ * Requirements error, something is missing that is required for the script to
+ * execute.
+ */
+const ERR_REQS = 3;
+
+/**
+ * Scrub error, something went wrong during the scrubbing of checkpoints and
+ * bitmaps.
+ */
+const ERR_SCRUB = 4;
+
 // Need to promisify exec to use async/await
 export const asyncExec = util.promisify(exec);
 
+/**
+ * The logger for the app.
+ */
 export const logger = winston.createLogger({
   levels: winston.config.npm.levels,
   format: winston.format.json(),
@@ -49,16 +80,23 @@ export const logger = winston.createLogger({
   ],
 });
 
+// Parse command line arguments
+const argv = Yargs(process.argv.slice(2)).argv;
+
+// Lock file for the script
+const lockfile = `${tmpdir()}/vmsnap.lock`;
+
 /**
- * Main function
+ * Performs a backup on one or more VM domains by inspecting passed in command
+ * line arguments.
  */
 const main = async () => {
   if (!argv.domains) {
-    throw new Error('No domains specified');
+    throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
 
   if (!argv.output) {
-    throw new Error('No output directory specified');
+    throw new Error('No output directory specified', { code: ERR_OUTPUT_DIR });
   }
 
   for (const domain of await parseDomains(argv.domains)) {
@@ -91,58 +129,81 @@ const main = async () => {
   }
 };
 
-// Parse command line arguments
-const argv = Yargs(process.argv.slice(2)).argv;
+/**
+ * Scrubs off the checkpoints and bitmaps for the domains passed in.
+ *
+ * @returns {Promise<boolean>} true if the scrubbing was successful, false if
+ * there was a failure.
+ */
+const scrub = async () => {
+  if (!argv.domains) {
+    throw new Error('No domains specified', { code: ERR_DOMAINS });
+  }
 
-const lockfile = `${tmpdir()}/vmsnap.lock`;
+  let scrubbed = false;
+
+  try {
+    for (const domain of await parseDomains(argv.domains)) {
+      logger.info(`  - Scrubbing domain: ${domain}`);
+
+      await cleanupCheckpoints(domain);
+
+      await cleanupBitmaps(domain);
+    }
+
+    scrubbed = true;
+  } catch (err) {
+    logger.error(err.message);
+
+    scrubbed = false;
+  }
+
+  return scrubbed;
+};
 
 // Run in a lock to prevent multiple instances from running
 lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
+  /**
+   * Release the lock created by the execution of the script.
+   */
+  const releaseLock = () => {
+    unlock(lockfile, (err) => {
+      if (err) {
+        logger.error(err);
+      }
+    });
+  };
+
   // Check dependencies
   checkDependencies().catch((err) => {
     logger.error(err);
 
-    exit(1);
+    releaseLock();
+
+    exit(ERR_REQS);
   });
 
   if (argv.scrub === 'true') {
     logger.info('Scrubbing checkpoints and bitmaps');
 
-    if (!argv.domains) {
-      throw new Error('No domains specified');
-    }
-
-    parseDomains(argv.domains)
-      .then(async (domains) => {
-        for (const domain of domains) {
-          logger.info(`  - Scrubbing domain: ${domain}`);
-
-          await cleanupCheckpoints(domain);
-
-          await cleanupBitmaps(domain);
-        }
-
-        exit(0);
-      })
+    scrub()
       .catch((err) => {
         logger.error(err.message);
 
-        exit(4);
+        exit(ERR_SCRUB);
+      })
+      .finally(() => {
+        releaseLock();
       });
   } else {
-    // Run the main function
     main()
       .catch((err) => {
         logger.error(err.message);
 
-        exit(2);
+        exit(ERR_MAIN);
       })
       .finally(() => {
-        unlock(lockfile, (err) => {
-          if (err) {
-            logger.error(err);
-          }
-        });
+        releaseLock();
       });
   }
 });

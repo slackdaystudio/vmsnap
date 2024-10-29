@@ -4,7 +4,7 @@ import { findVirtualDisks } from './virsh.js';
 /**
  * The qemu-img command interface.
  * 
- * @author: Philip J. Guinchard <phil.guinchardard@slackdaystudio.ca>
+ * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
 export const QEMU_IMG = 'qemu-img';

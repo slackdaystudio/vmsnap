@@ -8,7 +8,7 @@ import { BACKUP } from './libnbdbackup.js';
 /**
  * General functions used by vmsnap.
  *
- * @author: Philip J. Guinchard <phil.guinchardard@slackdaystudio.ca>
+ * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
 /**
