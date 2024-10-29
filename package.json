@@ -1,9 +1,10 @@
 {
   "name": "vmsnap",
-  "version": "0.0.1-alpha",
+  "version": "0.1.0-alpha",
   "description": "A Node based backup and backup rotation tool.",
   "main": "index.js",
   "scripts": {
+    "vmsnap": "node index.js",
     "test": "echo \"No tests specified\"",
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
@@ -15,6 +16,8 @@
   "dependencies": {
     "command-exists": "^1.2.9",
     "dayjs": "^1.11.13",
+    "lockfile": "^1.0.4",
+    "winston": "^3.14.2",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
@@ -27,8 +30,7 @@
     "eslint-plugin-prettier": "^5.2.1",
     "husky": "^9.1.6",
     "lint-staged": "^15.2.9",
-    "prettier": "^3.3.3",
-    "winston": "^3.14.2"
+    "prettier": "^3.3.3"
   },
   "lint-staged": {
     "*.js": "prettier --check --ignore-unknown"
