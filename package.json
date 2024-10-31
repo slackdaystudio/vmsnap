@@ -1,21 +1,21 @@
 {
   "name": "vmsnap",
-  "version": "0.2.1-alpha",
-  "description": "A Node based backup and backup rotation tool.",
-  "main": "/index.js",
+  "version": "0.2.2-alpha",
+  "description": "A Node based backup and backup rotation tool for KVM domains.",
+  "main": "index.js",
   "scripts": {
     "vmsnap": "node index.js --silent --no-update-notifier",
     "test": "echo \"No tests specified\"",
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
     "format": "npx prettier --write \"*.js\"",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "author": "Philip J. Guinchard",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git@github.com:slackdaystudio/vmsnap.git"
+    "url": "git+ssh://git@github.com/slackdaystudio/vmsnap.git"
   },
   "publishConfig": {
     "@sentry0:registry": "https://npm.pkg.github.com"

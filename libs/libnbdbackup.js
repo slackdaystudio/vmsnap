@@ -39,6 +39,7 @@ const backup = async (domain, outputDir, raw = false) => {
   }
 
   const child = spawn(BACKUP, commandOpts, {
+    cwd: import.meta.dirname,
     uid: 0,
     gid: 0,
     stdio: 'inherit',
