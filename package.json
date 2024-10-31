@@ -1,6 +1,6 @@
 {
   "name": "vmsnap",
-  "version": "0.2.0-alpha",
+  "version": "0.2.1-alpha",
   "description": "A Node based backup and backup rotation tool.",
   "main": "/index.js",
   "scripts": {
@@ -16,6 +16,9 @@
   "repository": {
     "type": "git",
     "url": "git@github.com:slackdaystudio/vmsnap.git"
+  },
+  "publishConfig": {
+    "@sentry0:registry": "https://npm.pkg.github.com"
   },
   "dependencies": {
     "command-exists": "^1.2.9",
