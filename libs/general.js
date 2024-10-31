@@ -2,10 +2,15 @@ import { exit } from 'process';
 import { access } from 'fs/promises';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import { lockfile, logger } from '../index.js';
+import { lockfile, logger, SCREEN_SIZE } from '../index.js';
 import { unlock } from 'lockfile';
-import { VIRSH } from './virsh.js';
-import { QEMU_IMG } from './qemu-img.js';
+import {
+  fetchAllDisks,
+  fetchAllDomains,
+  findCheckpoints,
+  VIRSH,
+} from './virsh.js';
+import { findBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
 
 /**
@@ -40,13 +45,17 @@ const getPreviousBackupFolder = () => {
 
 /**
  * Parses a string parameter for an array.
- * 
- * @param {string} param the string param to parse for an array 
+ *
+ * @param {string} param the string param to parse for an array
  * @param {function} fetchAll what to call to fetch all the items
  * @returns {Promise<Array<string>>} the parsed array
  */
 const parseArrayParam = async (param, fetchAll = async () => []) => {
   let parsed = [];
+
+  if (param === undefined || typeof param !== 'string') {
+    return parsed;
+  }
 
   if (param.indexOf(',') > -1) {
     parsed = param.split(',');
@@ -78,26 +87,177 @@ const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
   }
 };
 
-  /**
-   * Release the lock created by the execution of the script.
-   * 
-   * @param {number} exitCode the exit code to use after releasing the lock
-   */
-  const releaseLock = (exitCode) => {
-    if (exitCode === undefined) {
-      logger.info('No exit code provided for lock release');
-    };
+/**
+ * Release the lock created by the execution of the script.
+ *
+ * @param {number} exitCode the exit code to use after releasing the lock
+ */
+const releaseLock = (exitCode) => {
+  if (exitCode === undefined) {
+    logger.info('No exit code provided for lock release');
+  }
 
-    unlock(lockfile, (err) => {
-      if (err) {
-        logger.error(err);
+  unlock(lockfile, (err) => {
+    if (err) {
+      logger.error(err);
 
-        exit(ERR_LOCK_RELEASE);
+      exit(ERR_LOCK_RELEASE);
+    }
+
+    exit(exitCode);
+  });
+};
+
+/**
+ * Returns the key corresponding to a given value in a map.
+ *
+ * @param {Map<any, string>} map - A map to search for the key by value.
+ * @param {any} value - The value to search for in the map.
+ * @returns {any} The key of the map corresponding to the value, or undefined
+ * if not found.
+ */
+const findKeyByValue = (map, value) => {
+  for (const [key, val] of map.entries()) {
+    if (val === value) {
+      return key;
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * Creates a JSON representation of Domains, checkpoints, disks, and bitmaps.
+ *
+ * @param {string} rawDomains - A domain or list of domains to get the status
+ * of.
+ * @param {string} [approvedDisks] - A list of approved disks to include in the
+ * status check.
+ */
+const status = async (
+  rawDomains,
+  approvedDisks = undefined,
+  logging = true,
+) => {
+  const json = {};
+
+  const domains = await parseArrayParam(rawDomains, fetchAllDomains);
+
+  let currentJson = {};
+
+  let domainDisks;
+
+  if (logging) {
+    logger.info(`Getting statuses for domains: ${domains.join(', ')}`);
+  }
+
+  for (const domain of domains) {
+    const checkpoints = await findCheckpoints(domain);
+
+    currentJson.checkpoints = [];
+
+    domainDisks = approvedDisks
+      ? await parseArrayParam(approvedDisks, async () => [
+          ...(await fetchAllDisks(domain)).keys(),
+        ])
+      : [];
+
+    for (const checkpoint of checkpoints) {
+      currentJson.checkpoints.push(checkpoint);
+    }
+
+    const records = await findBitmaps(domain);
+
+    currentJson.disks = [];
+
+    const diskJson = {};
+
+    for (const record of records) {
+      diskJson.disk = record.disk;
+
+      if (record.bitmaps.length <= 0 || record.type !== 'qcow2') {
+        if (
+          Array.isArray(approvedDisks) &&
+          !approvedDisks.includes(record.disk)
+        ) {
+          continue;
+        }
       }
 
-      exit(exitCode);
-    });
-  };
+      diskJson.bitmaps = [];
+
+      for (const b of record.bitmaps) {
+        diskJson.bitmaps.push(b.name);
+      }
+
+      currentJson.disks.push(diskJson);
+    }
+
+    json[domain] = currentJson;
+
+    domainDisks = undefined;
+
+    currentJson = {};
+  }
+
+  return json;
+};
+
+/**
+ * Prints the status of the specified domains.
+ *
+ * @param {Array<object>} statuses the statuses to print
+ */
+const printStatuses = (statuses) => {
+  for (const domain of Object.keys(statuses)) {
+    const status = statuses[domain];
+
+    logger.info(`Status for ${domain}:`);
+
+    if (!status.checkpoints || status.checkpoints.length === 0) {
+      logger.info(`  No checkpoints found for ${domain}`);
+    } else {
+      logger.info(`  Checkpoints found for ${domain}:`);
+
+      for (const checkpoint of status.checkpoints) {
+        logger.info(`    ${checkpoint}`);
+      }
+    }
+
+    if (status.disks.length === 0) {
+      logger.info(`  No eligible disks found for ${domain}`);
+    } else {
+      logger.info(`  Eligible disks found for ${domain}:`);
+
+      for (const disk of status.disks) {
+        logger.info(`    ${disk.disk}`);
+
+        if (disk.bitmaps.length === 0) {
+        } else {
+          logger.info(`      Bitmaps found for ${disk.disk}:`);
+
+          for (const bitmap of disk.bitmaps) {
+            logger.info(`          ${bitmap}`);
+          }
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Frames text with a prefix and a line of hyphens.
+ *
+ * @param {string} prefix The prefix to display before the frame
+ * @param {*} text The text to display in the frame
+ * @param {boolean} trailingLb Whether to add a trailing line break
+ * @returns {string} The framed text
+ */
+const frame = (prefix, text, trailingLb = false) => {
+  const line = '-'.repeat(SCREEN_SIZE);
+
+  return `${prefix}:\n${line}\n${text}${trailingLb ? '\n' : ''}${line}`;
+};
 
 export {
   checkDependencies,
@@ -105,4 +265,8 @@ export {
   parseArrayParam,
   isLastMonthsBackupCreated,
   releaseLock,
+  findKeyByValue,
+  status,
+  printStatuses,
+  frame,
 };

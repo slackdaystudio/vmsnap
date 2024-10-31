@@ -30,11 +30,44 @@ To install VMSnap, follow these steps:
 
 To use VMSnap, issue the following commands from your checkout root:
 
+### Status
+
+The default action for VMSnap is to display a status report for VMs supplied.
+```sh
+npm run -s vmsnap -- --domains="dom1"
+```
+
+This could return the following information if ran, as an example.
+
+```
+info:    ▪ Status for dom1:
+info:    ▪   Checkpoints found for dom1:
+info:    ▪     virtnbdbackup.0
+info:    ▪     virtnbdbackup.1
+info:    ▪   Eligible disks found for dom1:
+info:    ▪     vda
+info:    ▪       Bitmaps found for vda:
+info:    ▪           virtnbdbackup.0
+info:    ▪           virtnbdbackup.1
+```
+
+Machine parsable output is possible with the `--json` and `--yaml` in 
+combination with the `--machine` flag.
+
+For example, running the following command... 
+```sh
+npm run -s vmsnap -- --domains="dom1" --machine --json
+```
+..will produce something like the following.
+```json
+{"dom1":{"checkpoints":["virtnbdbackup.0","virtnbdbackup.1"],"disks":[{"disk":"vda","bitmaps":["virtnbdbackup.0","virtnbdbackup.1"]}]}}
+```
+
 ### Backup
 
 Create a snapshot for `dom1` and output it to the `tmp` direcory:
 ```sh
-npm run vmsnap -- --domains="dom1" --output="/tmp" 
+npm run -s vmsnap -- --domains="dom1" --output="/tmp" --backup
 ```
 The above command will create a the backup for the domain.  This creates a 
 checkpoint and dirty bitmap on the VM file and deposits the backup to the `/tmp`
@@ -51,7 +84,7 @@ weeks of time, depending on where you are in the backup cycle.
 
 #### Raw Disk Handling
 
-You can turn on raw disk handling by setting `--raw="true"`.  
+You can turn on raw disk handling by setting `--raw`.  
 
 #### Approving Disks
 
@@ -66,7 +99,7 @@ backing up or scrubbing VMs.
 
 To scrub a VM of checkpoints and bitmaps:
 ```sh
-npm run vmsnap -- --domains="dom1" --scrub="true" 
+npm run vmsnap -- --domains="dom1" --scrub
 ```
 
 >Tip: The `--domains` flag also accepts a comma seperated list of domains.  You 

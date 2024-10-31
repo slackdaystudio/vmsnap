@@ -118,54 +118,22 @@ const fetchAllDisks = async (domain) => {
     throw new Error(stderr);
   }
 
-  for (const line of stdout.split('\n')) {
-    const disks = line.split(' ').filter((d) => d.length > 0);
+  for (const line of stdout.split('\n').slice(1)) {
+    const words = line.split(' ').filter((d) => d.length > 0);
 
-    // Need at least 4 columns to get the disk name
-    if (disks.length >= 4) {
-      diskList.set(disks[4], disks[disks.length - 1].trim());
+    // Need at least 4 words to get the disk name
+    if (words.length >= 4 && words[1] === 'disk') {
+      diskList.set(words[2], words[3].trim());
     }
   }
 
   return diskList;
 };
 
-/**
- * Lists all virtual disks for a given domain.
- *
- * @param {string} domain the domain to find virtual disks for
- * @param {Array<string>} approvedDisks a list of approved disks to cleanup
- * @returns {Promise<Array<string>} List of virtual disks
- */
-const findBackupDisks = async (domain, approvedDisks = []) => {
-  const command = [VIRSH, 'domblklist', domain, '--details'];
-
-  const { stdout, stderr } = await asyncExec(command.join(' '));
-
-  if (stderr) {
-    throw new Error(stderr);
-  }
-
-  return stdout
-    .split('\n')
-    .map((line) => {
-      const disks = line.split(' ').filter((d) => d.length > 0);
-
-      // Check if the disk is a virtual disk and not something else like a cdrom
-      if (
-        disks.length >= 4 &&
-        (disks[2].startsWith('vd') || approvedDisks.includes(disks[2]))
-      ) {
-        return disks[disks.length - 1];
-      }
-    })
-    .filter((d) => d !== undefined);
-};
-
 export {
   domainExists,
   fetchAllDomains,
+  findCheckpoints,
   cleanupCheckpoints,
   fetchAllDisks,
-  findBackupDisks,
 };

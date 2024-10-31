@@ -7,6 +7,8 @@ import dayjs from 'dayjs';
 import Yargs from 'yargs';
 import { lock } from 'lockfile';
 import * as winston from 'winston';
+import { consoleFormat } from 'winston-console-format';
+import * as YAML from 'json-to-pretty-yaml';
 import {
   cleanupCheckpoints,
   fetchAllDisks,
@@ -15,12 +17,17 @@ import {
 import { cleanupBitmaps } from './libs/qemu-img.js';
 import {
   checkDependencies,
+  frame,
   getPreviousBackupFolder,
   isLastMonthsBackupCreated,
   parseArrayParam,
+  printStatuses,
   releaseLock,
+  status,
 } from './libs/general.js';
 import { backup } from './libs/libnbdbackup.js';
+
+// const { YAML } = pkg;
 
 /**
  * This script is designed to backup KVM virtual machines using the
@@ -41,59 +48,101 @@ import { backup } from './libs/libnbdbackup.js';
  */
 
 /**
- * Error with the domains argument, usually indicates no domains were specified.
+ * The screen size for the logger.
  */
+export const SCREEN_SIZE = 80;
+
+/**
+ * Error codes for the script.
+ */
+
+// Error with the domains argument, usually indicates no domains were specified.
 const ERR_DOMAINS = 1;
 
-/**
- * Error with the output directory argument, usually indicates no output
- * directory was specified or it doesn't exist.
- */
+// Error with the output directory argument, usually indicates no output
 const ERR_OUTPUT_DIR = 2;
 
-/**
- * Main error, something went wrong during the main function.
- */
+// Main error, something went wrong during the main function.
 const ERR_MAIN = 3;
 
-/**
- * Requirements error, something is missing that is required for the script to
- * execute.
- */
+// Requirements error, something is missing that is required for the script to
 const ERR_REQS = 4;
 
-/**
- * Scrub error, something went wrong during the scrubbing of checkpoints and
- * bitmaps.
- */
+// Scrub error, something went wrong during the scrubbing of checkpoints and
 const ERR_SCRUB = 5;
 
-/**
- * Lock release error, something went wrong releasing the lock file.
- */
+// Lock release error, something went wrong releasing the lock file.
 export const ERR_LOCK_RELEASE = 6;
+
+// Lock file for the script
+export const lockfile = `${tmpdir()}/vmsnap.lock`;
 
 // Need to promisify exec to use async/await
 export const asyncExec = util.promisify(exec);
 
-/**
- * The logger for the app.
- */
-export const logger = winston.createLogger({
-  levels: winston.config.npm.levels,
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.simple(),
-    }),
-  ],
-});
-
 // Parse command line arguments
 const argv = Yargs(process.argv.slice(2)).argv;
 
-// Lock file for the script
-export const lockfile = `${tmpdir()}/vmsnap.lock`;
+// The formats for the logger
+let formats = [
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.splat(),
+  winston.format.json(),
+];
+
+// Add the ms format if the verbose flag is set
+if (argv.verbose) {
+  formats.push(winston.format.ms());
+}
+
+// The console format options
+let consoleFormatOptions = [
+  winston.format.colorize({ all: true }),
+  winston.format.padLevels(),
+  consoleFormat({
+    showMeta: true,
+    metaStrip: ['timestamp', 'service'],
+    inspectOptions: {
+      depth: Infinity,
+      colors: true,
+      maxArrayLength: Infinity,
+      breakLength: SCREEN_SIZE,
+      compact: Infinity,
+    },
+  }),
+];
+
+/**
+ * If the machine flag is set, we need to remove the colorize format and the
+ * padLevels, etc.  We only want to return an unformatted message.
+ *
+ * This is useful for machine readable output when using the status command.
+ *
+ * Example 1: npm run -s vmsnap -- --domains=vm1,vm2,etc --machine --json
+ *
+ * Example 2: npm run -s vmsnap -- --domains=vm1,vm2,etc --machine --yml
+ */
+if (argv.machine) {
+  formats = [];
+
+  consoleFormatOptions = [];
+
+  consoleFormatOptions.push(winston.format.printf(({ message }) => message));
+}
+
+// The logger for the app.
+export const logger = winston.createLogger({
+  levels: winston.config.syslog.levels,
+  format: winston.format.combine(...formats),
+  defaultMeta: { service: 'vmsnap' },
+  transports: [
+    new winston.transports.Console({
+      silent: false,
+      format: winston.format.combine(...consoleFormatOptions),
+    }),
+  ],
+});
 
 /**
  * Fetches all domains found on the system.
@@ -129,7 +178,7 @@ const main = async () => {
     const lastMonthsBackupsDir = `${argv.output}/${domain}/${getPreviousBackupFolder()}`;
 
     // If it's the first of the month, run a cleanup for any the bitmaps and
-    // checkpoints found for the domain if pruning is flagged on.
+    // checkpoints found for the domain.
     if (dayjs().date() === 1) {
       logger.info('First of the month, running cleanup');
 
@@ -138,7 +187,10 @@ const main = async () => {
       await cleanupBitmaps(
         domain,
         async () =>
-          await parseArrayParam(argv.approvedDisks, () => fetchDisks(domain)),
+          await parseArrayParam(
+            argv.approvedDisks,
+            async () => await fetchDisks(domain),
+          ),
       );
     }
 
@@ -202,7 +254,7 @@ const scrub = async () => {
 // Exit code for the script
 let exitCode = 0;
 
-// Run in a lock to prevent multiple instances from running
+// Run with a lock to prevent multiple instances from running
 lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
   checkDependencies().catch((err) => {
     logger.error(err);
@@ -210,7 +262,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
     releaseLock(ERR_REQS);
   });
 
-  if (argv.scrub === 'true') {
+  if (argv.scrub) {
     scrub()
       .catch((err) => {
         logger.error(err.message);
@@ -220,12 +272,36 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
       .finally(() => {
         releaseLock(exitCode);
       });
-  } else {
+  } else if (argv.backup) {
     main()
       .catch((err) => {
-        logger.error(err.message);
+        logger.error(err.message, 2);
 
         exitCode = err.code || ERR_MAIN;
+      })
+      .finally(() => {
+        releaseLock(exitCode);
+      });
+  } else {
+    status(argv.domains || '*', argv.approvedDisks, argv.machine !== true)
+      .then((statuses) => {
+        if (argv.json) {
+          if (argv.machine) {
+            logger.info(JSON.stringify(statuses));
+          } else {
+            logger.info(
+              frame('JSON', JSON.stringify(statuses, undefined, 2), true),
+            );
+          }
+        } else if (argv.yml || argv.yaml) {
+          if (argv.machine) {
+            logger.info(YAML.stringify(statuses));
+          } else {
+            logger.info(frame('YAML', YAML.stringify(statuses)));
+          }
+        } else {
+          printStatuses(statuses);
+        }
       })
       .finally(() => {
         releaseLock(exitCode);
