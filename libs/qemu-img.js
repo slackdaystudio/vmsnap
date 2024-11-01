@@ -58,11 +58,10 @@ const findBitmaps = async (domain) => {
  * month's backups.
  *
  * @param {string} domain the domain to cleanup bitmaps for
- * @param {Array<string>} approvedDisks a list of approved disks to cleanup
  * bitmaps for besides any virtual disks found.
  */
-const cleanupBitmaps = async (domain, approvedDisks = []) => {
-  const bitmaps = await findBitmaps(domain, approvedDisks);
+const cleanupBitmaps = async (domain) => {
+  const bitmaps = await findBitmaps(domain);
 
   for (const record of bitmaps) {
     if (record.bitmaps.length === 0) {

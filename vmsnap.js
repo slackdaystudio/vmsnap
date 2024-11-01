@@ -9,13 +9,10 @@ import { lock } from 'lockfile';
 import * as winston from 'winston';
 import { consoleFormat } from 'winston-console-format';
 import * as YAML from 'json-to-pretty-yaml';
-import {
-  cleanupCheckpoints,
-  fetchAllDisks,
-  fetchAllDomains,
-} from './libs/virsh.js';
+import { cleanupCheckpoints, fetchAllDomains } from './libs/virsh.js';
 import { cleanupBitmaps } from './libs/qemu-img.js';
 import {
+  checkCommand,
   checkDependencies,
   frame,
   getPreviousBackupFolder,
@@ -62,7 +59,7 @@ const ERR_DOMAINS = 1;
 const ERR_OUTPUT_DIR = 2;
 
 // Main error, something went wrong during the main function.
-const ERR_MAIN = 3;
+export const ERR_MAIN = 3;
 
 // Requirements error, something is missing that is required for the script to
 const ERR_REQS = 4;
@@ -151,16 +148,6 @@ export const logger = winston.createLogger({
 const fetchDomains = async () => await fetchAllDomains();
 
 /**
- * Finds all disks for a domain.
- *
- * @param {string} domain the domain to fetch disks for
- * @returns {Promise<Array<string>>} a list of disks for the domain
- */
-const fetchDisks = async (domain) => {
-  return await fetchAllDisks(domain).map((d) => d[1]);
-};
-
-/**
  * Performs a backup on one or more VM domains by inspecting passed in command
  * line arguments.
  */
@@ -189,14 +176,7 @@ const performBackup = async () => {
 
       await cleanupCheckpoints(domain);
 
-      await cleanupBitmaps(
-        domain,
-        async () =>
-          await parseArrayParam(
-            argv.approvedDisks,
-            async () => await fetchDisks(domain),
-          ),
-      );
+      await cleanupBitmaps(domain);
     }
 
     await backup(domain, argv.output, argv.raw);
@@ -237,13 +217,7 @@ const scrubCheckpointsAndBitmaps = async () => {
 
       await cleanupCheckpoints(domain);
 
-      await cleanupBitmaps(
-        domain,
-        await parseArrayParam(
-          argv.approvedDisks,
-          async () => await fetchDisks(domain),
-        ),
-      );
+      await cleanupBitmaps(domain);
     }
 
     scrubbed = true;
@@ -267,6 +241,8 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
     releaseLock(ERR_REQS);
   });
 
+  checkCommand(argv);
+
   if (argv.scrub) {
     scrubCheckpointsAndBitmaps()
       .catch((err) => {
@@ -288,7 +264,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         releaseLock(exitCode);
       });
   } else {
-    status(argv.domains || '*', argv.approvedDisks, argv.machine !== true)
+    status(argv.domains || '*', argv.machine !== true)
       .then((statuses) => {
         if (argv.json) {
           if (argv.machine) {

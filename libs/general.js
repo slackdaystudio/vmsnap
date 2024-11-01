@@ -2,7 +2,7 @@ import { exit } from 'process';
 import { access } from 'fs/promises';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import { lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
+import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
 import { unlock } from 'lockfile';
 import {
   fetchAllDisks,
@@ -35,8 +35,35 @@ const checkDependencies = async () => {
 };
 
 /**
- * Returns the current months backup folder name in the format YYYY-MM.
+ * Checks the command line arguments to ensure only one command is being run.
  * 
+ * @param {object} argv the arguments passed to the script
+ */
+const checkCommand = ({status, scrub, backup}) => {
+  let commandCount = 0;
+
+  if (status) {
+    ++commandCount;
+  }
+
+  if (scrub) {
+    ++commandCount;
+  }
+
+  if (backup) {
+    ++commandCount;
+  }
+
+  if (commandCount > 1) {
+    logger.error('Only one command can be run at a time');
+
+    releaseLock(ERR_MAIN);
+  }
+}
+
+/**
+ * Returns the current months backup folder name in the format YYYY-MM.
+ *
  * @returns {string} the current months backup folder name
  */
 const getBackupFolder = () => dayjs().format('YYYY-MM');
@@ -97,7 +124,7 @@ const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
 /**
  * Checks to see if the backup directory for the domain exists for the current
  * month.
- * 
+ *
  * @param {string} domain the domain to check
  * @param {*} path the path to the backup directory root
  * @returns true if the backup directory for the domain exists, false otherwise
@@ -156,17 +183,11 @@ const findKeyByValue = (map, value) => {
  *
  * @param {string} rawDomains - A domain or list of domains to get the status
  * of.
- * @param {string} [approvedDisks] - A list of approved disks to include in the
- * status check.
  * @param {boolean} [logging] - Whether to log the status of the domains.
  * @returns {Promise<object>} A JSON object representing the status of the
  * domains.
  */
-const status = async (
-  rawDomains,
-  approvedDisks = undefined,
-  logging = true,
-) => {
+const status = async (rawDomains, logging = true) => {
   const json = {};
 
   const domains = await parseArrayParam(rawDomains, fetchAllDomains);
@@ -184,11 +205,7 @@ const status = async (
 
     currentJson.checkpoints = [];
 
-    domainDisks = approvedDisks
-      ? await parseArrayParam(approvedDisks, async () => [
-          ...(await fetchAllDisks(domain)).keys(),
-        ])
-      : [];
+    domainDisks = [...(await fetchAllDisks(domain)).keys()] || [];
 
     for (const checkpoint of checkpoints) {
       currentJson.checkpoints.push(checkpoint);
@@ -289,6 +306,7 @@ const frame = (prefix, text, trailingLb = false) => {
 
 export {
   checkDependencies,
+  checkCommand,
   getBackupFolder,
   getPreviousBackupFolder,
   parseArrayParam,
