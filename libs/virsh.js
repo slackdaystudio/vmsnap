@@ -56,7 +56,7 @@ const fetchAllDomains = async () => {
  * Returns a list of checkpoints for a given domain.
  *
  * @param {string} domain the domain to find checkpoints for
- * @returns
+ * @returns {Promise<Array<string>} a list of checkpoints for the domain
  */
 const findCheckpoints = async (domain) => {
   const command = [VIRSH, 'checkpoint-list', domain, '--name'];
