@@ -58,7 +58,7 @@ const cleanupBitmaps = async (domain, approvedDisks = []) => {
 
   for (const record of bitmaps) {
     if (record.bitmaps.length === 0 || record.type !== 'qcow2') {
-      logger.info(`No bitmaps found for ${disk} on domain ${domain}`);
+      logger.info(`No bitmaps found for ${record.disk} on domain ${domain}`);
 
       continue;
     }
