@@ -133,6 +133,9 @@ const findKeyByValue = (map, value) => {
  * of.
  * @param {string} [approvedDisks] - A list of approved disks to include in the
  * status check.
+ * @param {boolean} [logging] - Whether to log the status of the domains.
+ * @returns {Promise<object>} - A JSON object representing the status of the
+ * disks and checkpoints for the domains.
  */
 const status = async (
   rawDomains,
@@ -174,15 +177,6 @@ const status = async (
 
     for (const record of records) {
       diskJson.disk = record.disk;
-
-      if (record.bitmaps.length <= 0 || record.type !== 'qcow2') {
-        if (
-          Array.isArray(approvedDisks) &&
-          !approvedDisks.includes(record.disk)
-        ) {
-          continue;
-        }
-      }
 
       diskJson.bitmaps = [];
 

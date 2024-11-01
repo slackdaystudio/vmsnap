@@ -15,7 +15,8 @@ export const QEMU_IMG = 'qemu-img';
  * properties and the bitmaps found.
  * 
  * @param {string} domain the name of the domain to find bitmaps for 
- * @returns 
+ * @returns {Promise<Array<Object>>} the bitmaps found for the domain and some
+ * addtional information about the disk
  */
 const findBitmaps = async (domain) => {
   const bitmaps = [];
