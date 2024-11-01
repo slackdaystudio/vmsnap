@@ -34,13 +34,19 @@ npx install -g vmsnap
 
 ## Usage
 
-To use VMSnap, issue the following commands from your checkout root:
+This usage guide assumes you have installed VMSnap via the `npx install -g vmsnap`
+command.  Doing so will install VMSnap which includes a vmsnap bin.
+
+>You may execute the same commands from a local checkout by swapping out the 
+name of the bin for `npm run vmsnap --`.  For example, to run a status check 
+from a local version you first go to your code checkout and then run 
+`npm run vmsnap -- --domains=vm1,vm2`
 
 ### Status
 
 The default action for VMSnap is to display a status report for VMs supplied.
 ```sh
-npm run -s vmsnap -- --domains="dom1"
+vmsnap --domains="dom1"
 ```
 
 This could return the following information if ran, as an example.
@@ -57,12 +63,12 @@ info:    ▪           virtnbdbackup.0
 info:    ▪           virtnbdbackup.1
 ```
 
-Machine parsable output is possible with the `--json` and `--yaml` in 
+Machine parsable output is possible with the `--json` and `--yaml` flags in 
 combination with the `--machine` flag.
 
 For example, running the following command... 
 ```sh
-npm run -s vmsnap -- --domains="dom1" --machine --json
+vmsnap --domains="dom1" --machine --json
 ```
 ..will produce something like the following.
 ```json
@@ -73,7 +79,7 @@ npm run -s vmsnap -- --domains="dom1" --machine --json
 
 Create a snapshot for `dom1` and output it to the `tmp` direcory:
 ```sh
-npm run -s vmsnap -- --domains="dom1" --output="/tmp" --backup
+vmsnap --domains="dom1" --output="/tmp" --backup
 ```
 The above command will create a the backup for the domain.  This creates a 
 checkpoint and dirty bitmap on the VM file and deposits the backup to the `/tmp`
@@ -105,7 +111,7 @@ backing up or scrubbing VMs.
 
 To scrub a VM of checkpoints and bitmaps:
 ```sh
-npm run vmsnap -- --domains="dom1" --scrub
+vmsnap --domains="dom1" --scrub
 ```
 
 >Tip: The `--domains` flag also accepts a comma seperated list of domains.  You 
