@@ -1,6 +1,6 @@
 {
   "name": "vmsnap",
-  "version": "0.2.4-alpha",
+  "version": "0.2.5-alpha",
   "description": "A Node based backup and backup rotation tool for KVM domains.",
   "scripts": {
     "vmsnap": "node vmsnap.js",
@@ -8,7 +8,7 @@
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
     "format": "npx prettier --write \"*.js\"",
-    "prepare": "husky install"
+    "prepare": "husky install || true"
   },
   "author": "Philip J. Guinchard",
   "license": "MIT",

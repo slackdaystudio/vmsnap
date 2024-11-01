@@ -14,7 +14,7 @@ installation instructions, usage guidelines, and contribution information.
 To install VMSnap, follow these steps:
 
 ```
-npx install -g vmsnap
+npm install -g vmsnap
 ```
 
 ### Local
@@ -34,7 +34,7 @@ npx install -g vmsnap
 
 ## Usage
 
-This usage guide assumes you have installed VMSnap via the `npx install -g vmsnap`
+This usage guide assumes you have installed VMSnap via the `npm install -g vmsnap`
 command.  Doing so will install VMSnap which includes a vmsnap bin.
 
 >You may execute the same commands from a local checkout by swapping out the 
