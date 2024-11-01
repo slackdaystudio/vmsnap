@@ -165,7 +165,7 @@ const fetchDisks = async (domain) => {
  * Performs a backup on one or more VM domains by inspecting passed in command
  * line arguments.
  */
-const main = async () => {
+const performBackup = async () => {
   if (!argv.domains) {
     throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
@@ -217,7 +217,7 @@ const main = async () => {
  * @returns {Promise<boolean>} true if the scrubbing was successful, false if
  * there was a failure.
  */
-const scrub = async () => {
+const scrubCheckpointsAndBitmaps = async () => {
   if (!argv.domains) {
     throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
@@ -263,7 +263,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
   });
 
   if (argv.scrub) {
-    scrub()
+    scrubCheckpointsAndBitmaps()
       .catch((err) => {
         logger.error(err.message);
 
@@ -273,7 +273,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         releaseLock(exitCode);
       });
   } else if (argv.backup) {
-    main()
+    performBackup()
       .catch((err) => {
         logger.error(err.message, 2);
 

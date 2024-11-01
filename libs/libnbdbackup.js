@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import dayjs from 'dayjs';
-import { logger } from '../index.js';
+import { logger } from '../vmsnap.js';
 import { domainExists } from './virsh.js';
 
 /**

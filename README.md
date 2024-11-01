@@ -1,7 +1,7 @@
 # VMSnap
 
 VMSnap is a tool designed to simplify the process of creating and managing 
-snapshots of virtual machines. This README provides an overview of the project, 
+snapshots of KVM domains. This README provides an overview of the project, 
 installation instructions, usage guidelines, and contribution information.
 
 ## Features
@@ -12,6 +12,12 @@ installation instructions, usage guidelines, and contribution information.
 ## Installation
 
 To install VMSnap, follow these steps:
+
+```
+npx install -g vmsnap
+```
+
+### Local
 
 1. Clone the repository:
     ```sh

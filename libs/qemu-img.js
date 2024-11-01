@@ -1,4 +1,4 @@
-import { asyncExec, logger } from '../index.js';
+import { asyncExec, logger } from '../vmsnap.js';
 import { findKeyByValue } from './general.js';
 import { fetchAllDisks } from './virsh.js';
 

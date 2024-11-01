@@ -2,7 +2,7 @@ import { exit } from 'process';
 import { access } from 'fs/promises';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import { lockfile, logger, SCREEN_SIZE } from '../index.js';
+import { lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
 import { unlock } from 'lockfile';
 import {
   fetchAllDisks,
@@ -104,7 +104,7 @@ const releaseLock = (exitCode) => {
       exit(ERR_LOCK_RELEASE);
     }
 
-    exit(exitCode);
+    exit(exitCode || 99);
   });
 };
 

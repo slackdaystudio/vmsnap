@@ -1,5 +1,5 @@
-import { asyncExec } from '../index.js';
-import { logger } from '../index.js';
+import { asyncExec } from '../vmsnap.js';
+import { logger } from '../vmsnap.js';
 
 /**
  * The virsh command functions.
