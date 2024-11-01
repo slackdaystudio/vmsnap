@@ -11,9 +11,6 @@ import { fetchAllDisks } from './virsh.js';
 
 export const QEMU_IMG = 'qemu-img';
 
-// How many bytes are in a gigabyte
-const BYTES_PER_GB = 1073741824;
-
 /**
  * Finds all bitmaps for a given domain and returns a JSON object with the disk
  * properties and the bitmaps found.
