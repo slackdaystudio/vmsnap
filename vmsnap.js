@@ -1,4 +1,4 @@
-#!/usr/local/bin/node
+#!/usr/bin/env node
 import { exec } from 'child_process';
 import util from 'util';
 import { tmpdir } from 'os';
@@ -26,8 +26,6 @@ import {
   status,
 } from './libs/general.js';
 import { backup } from './libs/libnbdbackup.js';
-
-// const { YAML } = pkg;
 
 /**
  * This script is designed to backup KVM virtual machines using the
