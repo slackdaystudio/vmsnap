@@ -1,3 +1,4 @@
+import prettyBytes from 'pretty-bytes';
 import { asyncExec, logger } from '../vmsnap.js';
 import { findKeyByValue } from './general.js';
 import { fetchAllDisks } from './virsh.js';
@@ -10,12 +11,15 @@ import { fetchAllDisks } from './virsh.js';
 
 export const QEMU_IMG = 'qemu-img';
 
+// How many bytes are in a gigabyte
+const BYTES_PER_GB = 1073741824;
+
 /**
  * Finds all bitmaps for a given domain and returns a JSON object with the disk
  * properties and the bitmaps found.
- * 
- * @param {string} domain the name of the domain to find bitmaps for 
- * @returns 
+ *
+ * @param {string} domain the name of the domain to find bitmaps for
+ * @returns {Promise<Array<Object>>} a list of bitmaps found for the domain
  */
 const findBitmaps = async (domain) => {
   const bitmaps = [];
@@ -23,19 +27,26 @@ const findBitmaps = async (domain) => {
   const disks = await fetchAllDisks(domain);
 
   for (const disk of disks.values()) {
-    const command = [QEMU_IMG, 'info', '-f', 'qcow2', disk, '--output=json'];
+    const command = [QEMU_IMG, 'info', disk, '--output=json'];
 
     try {
       const { stdout } = await asyncExec(command.join(' '));
 
       const domainConfig = JSON.parse(stdout);
 
+      const type = domainConfig['format'];
+
       bitmaps.push({
         disk: findKeyByValue(disks, disk),
-        type: domainConfig['format-specific']['type'],
+        virtualSize: prettyBytes(domainConfig['virtual-size']),
+        actualSize: prettyBytes(domainConfig['actual-size']),
+        type,
         name: disk.split('/').pop(),
         path: disk,
-        bitmaps: domainConfig['format-specific']['data']['bitmaps'] || [],
+        bitmaps:
+          type === 'raw'
+            ? []
+            : domainConfig['format-specific']['data']['bitmaps'] || [],
       });
     } catch (error) {
       continue;
@@ -57,7 +68,7 @@ const cleanupBitmaps = async (domain, approvedDisks = []) => {
   const bitmaps = await findBitmaps(domain, approvedDisks);
 
   for (const record of bitmaps) {
-    if (record.bitmaps.length === 0 || record.type !== 'qcow2') {
+    if (record.bitmaps.length === 0) {
       logger.info(`No bitmaps found for ${record.disk} on domain ${domain}`);
 
       continue;
@@ -68,20 +79,24 @@ const cleanupBitmaps = async (domain, approvedDisks = []) => {
         QEMU_IMG,
         'bitmap',
         '--remove',
-        '-f',
-        'qcow2',
         record.path,
         bitmap.name,
       ];
 
-      logger.info(`- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`);
+      logger.info(
+        `- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`,
+      );
 
       try {
-        logger.info(`- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`);
+        logger.info(
+          `- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`,
+        );
 
         await asyncExec(command.join(' '));
       } catch (error) {
-        logger.warn(`Error removing bitmap ${bitmap.name} from ${record.path} on ${domain}: ${error.message}`);
+        logger.warn(
+          `Error removing bitmap ${bitmap.name} from ${record.path} on ${domain}: ${error.message}`,
+        );
 
         continue;
       }

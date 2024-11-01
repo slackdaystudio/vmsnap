@@ -20,6 +20,7 @@ import {
   frame,
   getPreviousBackupFolder,
   isLastMonthsBackupCreated,
+  isThisMonthsBackupCreated,
   parseArrayParam,
   printStatuses,
   releaseLock,
@@ -175,10 +176,16 @@ const performBackup = async () => {
   for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
     const lastMonthsBackupsDir = `${argv.output}/${domain}/${getPreviousBackupFolder()}`;
 
+    const todaysDay = dayjs().date();
+
     // If it's the first of the month, run a cleanup for any the bitmaps and
     // checkpoints found for the domain.
-    if (dayjs().date() === 1) {
-      logger.info('First of the month, running cleanup');
+    if (
+      todaysDay >= 1 &&
+      todaysDay <= 14 &&
+      !(await isThisMonthsBackupCreated(domain, argv.output))
+    ) {
+      logger.info('Creating a new backup directory, running bitmap cleanup');
 
       await cleanupCheckpoints(domain);
 
@@ -192,13 +199,13 @@ const performBackup = async () => {
       );
     }
 
-    await backup(domain, argv.output, argv.raw === 'true');
+    await backup(domain, argv.output, argv.raw);
 
     // If it's the middle of the month, run a cleanup of the previous month's
     // backups if they exist and the prune flag is set.
     if (
       argv.prune === 'true' &&
-      dayjs().date() >= 15 &&
+      todaysDay >= 15 &&
       (await isLastMonthsBackupCreated(lastMonthsBackupsDir))
     ) {
       logger.info('Middle of the month, running cleanup');
