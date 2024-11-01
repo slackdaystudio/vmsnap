@@ -35,6 +35,13 @@ const checkDependencies = async () => {
 };
 
 /**
+ * Returns the current months backup folder name in the format YYYY-MM.
+ * 
+ * @returns {string} the current months backup folder name
+ */
+const getBackupFolder = () => dayjs().format('YYYY-MM');
+
+/**
  * Returns last months backup folder name.
  *
  * @returns {string} Previous month in the format YYYY-MM
@@ -80,6 +87,24 @@ const parseArrayParam = async (param, fetchAll = async () => []) => {
 const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
   try {
     await access(lastMonthsBackupsDir);
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
+ * Checks to see if the backup directory for the domain exists for the current
+ * month.
+ * 
+ * @param {string} domain the domain to check
+ * @param {*} path the path to the backup directory root
+ * @returns true if the backup directory for the domain exists, false otherwise
+ */
+const isThisMonthsBackupCreated = async (domain, path) => {
+  try {
+    await access(`${path}/${domain}/${getBackupFolder()}`);
 
     return true;
   } catch (error) {
@@ -134,8 +159,6 @@ const findKeyByValue = (map, value) => {
  * @param {string} [approvedDisks] - A list of approved disks to include in the
  * status check.
  * @param {boolean} [logging] - Whether to log the status of the domains.
- * @returns {Promise<object>} - A JSON object representing the status of the
- * disks and checkpoints for the domains.
  */
 const status = async (
   rawDomains,
@@ -173,10 +196,14 @@ const status = async (
 
     currentJson.disks = [];
 
-    const diskJson = {};
+    let diskJson = {};
 
     for (const record of records) {
       diskJson.disk = record.disk;
+
+      diskJson.virtualSize = record.virtualSize;
+
+      diskJson.actualSize = record.actualSize;
 
       diskJson.bitmaps = [];
 
@@ -185,6 +212,8 @@ const status = async (
       }
 
       currentJson.disks.push(diskJson);
+
+      diskJson = {};
     }
 
     json[domain] = currentJson;
@@ -225,8 +254,11 @@ const printStatuses = (statuses) => {
 
       for (const disk of status.disks) {
         logger.info(`    ${disk.disk}`);
+        logger.info(`      Virtual size: ${disk.virtualSize}`);
+        logger.info(`      Actual size: ${disk.actualSize}`);
 
         if (disk.bitmaps.length === 0) {
+          logger.info(`      No bitmaps found for ${disk.disk}`);
         } else {
           logger.info(`      Bitmaps found for ${disk.disk}:`);
 
@@ -255,8 +287,10 @@ const frame = (prefix, text, trailingLb = false) => {
 
 export {
   checkDependencies,
+  getBackupFolder,
   getPreviousBackupFolder,
   parseArrayParam,
+  isThisMonthsBackupCreated,
   isLastMonthsBackupCreated,
   releaseLock,
   findKeyByValue,

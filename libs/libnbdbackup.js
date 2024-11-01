@@ -2,10 +2,11 @@ import { spawn } from 'child_process';
 import dayjs from 'dayjs';
 import { logger } from '../vmsnap.js';
 import { domainExists } from './virsh.js';
+import { getBackupFolder } from './general.js';
 
 /**
  * Our functions for interfacing with the virtnbdbackup utility.
- * 
+ *
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
@@ -31,7 +32,7 @@ const backup = async (domain, outputDir, raw = false) => {
     '-l',
     'auto',
     '-o',
-    `${outputDir}/${domain}/${dayjs().format('YYYY-MM')}`,
+    `${outputDir}/${domain}/${getBackupFolder()}`,
   ];
 
   if (raw) {
