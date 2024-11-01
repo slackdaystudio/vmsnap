@@ -50,17 +50,21 @@ command. Doing so will install VMSnap which includes a vmsnap bin.
 
 The following CLI switches are available when invoking VMSnap.
 
-|   Switch    | Status | Backup | Scrub |  Type  |                         Examples                         |
-|-------------|------|--------|--------|---------|----------------------------------------------------------|
-| `--domains` | ✅   | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                            |
-| `--status`  | ✅   | -      | -      | boolean | Querys the domain(s)                                     |
-| `--backup`  | -    | ✅     | -      | boolean | Does an incremental backup (if possible)                 |
-| `--scrub`   | -    | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain         |
-| `--output`  | -    | ✅     | -      | string  | A full path to a directory where backups will be placed  |
-| `--verbose` | ✅   | -      | -      | boolean | Prints out extra information when running a status check |
-| `--machine` | ✅   | -      | -      | boolean | Removes some output from the status command              |
-| `--json`    | ✅   | -      | -      | boolean | Outputs the status command is JSON                       |
-| `--yaml`    | ✅   | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`) |
+| Switch  | Status | Backup | Scrub  |  Type   |                     Examples/Notes                       |
+|---------|--------|--------|--------|---------|----------------------------------------------------------|
+| domains | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                            |
+| status  | ✅     | -      | -      | boolean | Querys the domain(s)                                     |
+| backup  | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                 |
+| scrub   | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain         |
+| output  | -      | ✅     | -      | string  | A full path to a directory where backups will be placed  |
+| verbose | ✅     | -      | -      | boolean | Prints out extra information when running a status check |
+| machine | ✅     | -      | -      | boolean | Removes some output from the status command              |
+| json    | ✅     | -      | -      | boolean | Outputs the status command is JSON                       |
+| yaml    | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`) |
+| raw     | -      | ✅     | -      | boolean | Enables raw disk handling                                |
+| prune   | -      | ✅     | -      | boolean | Rotates backups by **deleting** last months backup*      |
+
+*\*This happens on or after the 15th of the current month*
 
 ### Status
 
