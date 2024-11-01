@@ -159,6 +159,8 @@ const findKeyByValue = (map, value) => {
  * @param {string} [approvedDisks] - A list of approved disks to include in the
  * status check.
  * @param {boolean} [logging] - Whether to log the status of the domains.
+ * @returns {Promise<object>} A JSON object representing the status of the
+ * domains.
  */
 const status = async (
   rawDomains,
