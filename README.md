@@ -79,13 +79,14 @@ The following CLI switches are available when invoking VMSnap.
 | status  | ✅     | -      | -      | boolean | Querys the domain(s)                                     |
 | backup  | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                 |
 | scrub   | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain         |
-| output  | -      | ✅     | -      | string  | A full path to a directory where backups will be placed  |
+| output  | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed      |
 | verbose | ✅     | -      | -      | boolean | Prints out extra information when running a status check |
 | machine | ✅     | -      | -      | boolean | Removes some output from the status command              |
 | json    | ✅     | -      | -      | boolean | Outputs the status command is JSON                       |
 | yaml    | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`) |
 | raw     | -      | ✅     | -      | boolean | Enables raw disk handling                                |
 | prune   | -      | ✅     | -      | boolean | Rotates backups by **deleting** last months backup*      |
+| pretty  | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)          |
 
 *\*This happens on or after the 15th of the current month*
 
@@ -122,6 +123,9 @@ info:    ▪       Bitmaps found for vda:
 info:    ▪           virtnbdbackup.0
 info:    ▪           virtnbdbackup.1
 ```
+
+>**Tip:** Pass in an `output=/PATH/TO/BACKUPS` flag to see statistics about the
+> backups already saved to disk.
 
 Machine parsable output is possible with the `--json` and `--yaml` flags in
 combination with the `--machine` flag.

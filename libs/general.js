@@ -1,9 +1,10 @@
 import { exit } from 'process';
-import { access } from 'fs/promises';
+import { access, readdir, stat } from 'fs/promises';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
+import prettyBytes from 'pretty-bytes';
 import { unlock } from 'lockfile';
+import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
 import {
   fetchAllDisks,
   fetchAllDomains,
@@ -36,10 +37,10 @@ const checkDependencies = async () => {
 
 /**
  * Checks the command line arguments to ensure only one command is being run.
- * 
+ *
  * @param {object} argv the arguments passed to the script
  */
-const checkCommand = ({status, scrub, backup}) => {
+const checkCommand = ({ status, scrub, backup }) => {
   let commandCount = 0;
 
   if (status) {
@@ -59,7 +60,7 @@ const checkCommand = ({status, scrub, backup}) => {
 
     releaseLock(ERR_MAIN);
   }
-}
+};
 
 /**
  * Returns the current months backup folder name in the format YYYY-MM.
@@ -184,10 +185,11 @@ const findKeyByValue = (map, value) => {
  * @param {string} rawDomains - A domain or list of domains to get the status
  * of.
  * @param {boolean} [logging] - Whether to log the status of the domains.
+ * @param {string} [path] - The path to the backup directory root.
  * @returns {Promise<object>} A JSON object representing the status of the
  * domains.
  */
-const status = async (rawDomains, logging = true) => {
+const status = async (rawDomains, logging = true, path = undefined) => {
   const json = {};
 
   const domains = await parseArrayParam(rawDomains, fetchAllDomains);
@@ -237,6 +239,10 @@ const status = async (rawDomains, logging = true) => {
 
     json[domain] = currentJson;
 
+    if (path && typeof path === 'string') {
+      await addBackupStats(domain, json, path);
+    }
+
     domainDisks = undefined;
 
     currentJson = {};
@@ -246,11 +252,46 @@ const status = async (rawDomains, logging = true) => {
 };
 
 /**
+ * Inspects the backup directory for the domain and adds stats to the JSON.
+ *
+ * @param {string} domain the domain to add backup stats for
+ * @param {*} json the JSON object to add the stats to
+ * @param {*} path the path to the backup directory root
+ */
+const addBackupStats = async (domain, json, path) => {
+  const root = `${path}/${domain}/${getBackupFolder()}`;
+
+  const checkpoints = await readdir(`${root}/checkpoints`);
+
+  const stats = {
+    path: root,
+    totalFiles: checkpoints.length,
+    checkpoints: checkpoints.length,
+    totalSize: 0,
+  };
+
+  let fsStats;
+
+  for (const item of await readdir(root)) {
+    fsStats = await stat(`${root}/${item}`);
+
+    stats.totalFiles++;
+    stats.totalSize += fsStats.size;
+  }
+
+  json[domain].backupDirStats = stats;
+};
+
+/**
  * Prints the status of the specified domains.
  *
  * @param {Array<object>} statuses the statuses to print
+ * @param {boolean} pretty whether to print the statuses with formatted disk
+ * sizes or not.
  */
-const printStatuses = (statuses) => {
+const printStatuses = (statuses, pretty = false) => {
+  const printSize = (size) => (pretty ? prettyBytes(size) : size);
+
   for (const domain of Object.keys(statuses)) {
     const status = statuses[domain];
 
@@ -273,8 +314,8 @@ const printStatuses = (statuses) => {
 
       for (const disk of status.disks) {
         logger.info(`    ${disk.disk}`);
-        logger.info(`      Virtual size: ${disk.virtualSize}`);
-        logger.info(`      Actual size: ${disk.actualSize}`);
+        logger.info(`      Virtual size: ${printSize(disk.virtualSize)}`);
+        logger.info(`      Actual size: ${printSize(disk.actualSize)}`);
 
         if (disk.bitmaps.length === 0) {
           logger.info(`      No bitmaps found for ${disk.disk}`);
@@ -286,6 +327,16 @@ const printStatuses = (statuses) => {
           }
         }
       }
+    }
+
+    if (status.backupDirStats) {
+      logger.info(`  Backup directory stats for ${domain}:`);
+      logger.info(`    Path: ${status.backupDirStats.path}`);
+      logger.info(`    Total files: ${status.backupDirStats.totalFiles}`);
+      logger.info(
+        `    Total size: ${printSize(status.backupDirStats.totalSize)}`,
+      );
+      logger.info(`    Checkpoints: ${status.backupDirStats.checkpoints}`);
     }
   }
 };

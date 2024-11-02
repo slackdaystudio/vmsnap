@@ -1,4 +1,3 @@
-import prettyBytes from 'pretty-bytes';
 import { asyncExec, logger } from '../vmsnap.js';
 import { findKeyByValue } from './general.js';
 import { fetchAllDisks } from './virsh.js';
@@ -35,8 +34,8 @@ const findBitmaps = async (domain) => {
 
       bitmaps.push({
         disk: findKeyByValue(disks, disk),
-        virtualSize: prettyBytes(domainConfig['virtual-size']),
-        actualSize: prettyBytes(domainConfig['actual-size']),
+        virtualSize: domainConfig['virtual-size'],
+        actualSize: domainConfig['actual-size'],
         type,
         name: disk.split('/').pop(),
         path: disk,

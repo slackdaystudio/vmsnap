@@ -264,7 +264,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         releaseLock(exitCode);
       });
   } else {
-    status(argv.domains || '*', argv.machine !== true)
+    status(argv.domains || '*', argv.machine !== true, argv.output)
       .then((statuses) => {
         if (argv.json) {
           if (argv.machine) {
@@ -281,7 +281,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
             logger.info(frame('YAML', YAML.stringify(statuses)));
           }
         } else {
-          printStatuses(statuses);
+          printStatuses(statuses, argv.pretty);
         }
       })
       .finally(() => {
