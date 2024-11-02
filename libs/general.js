@@ -7,7 +7,13 @@ import dayjs from 'dayjs';
 import commandExists from 'command-exists';
 import prettyBytes from 'pretty-bytes';
 import { unlock } from 'lockfile';
-import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
+import {
+  ERR_MAIN,
+  ERR_REQS,
+  lockfile,
+  logger,
+  SCREEN_SIZE,
+} from '../vmsnap.js';
 import { fetchAllDomains, findCheckpoints, VIRSH } from './virsh.js';
 import { findBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
@@ -47,7 +53,10 @@ const checkDependencies = async () => {
   }
 
   if (missingPrograms.length > 0) {
-    throw new Error(`Missing dependencies (${missingPrograms.join(', ')})`);
+    throw new Error(
+      `Missing dependencies (${missingPrograms.join(', ')})`,
+      ERR_REQS,
+    );
   }
 };
 
@@ -259,10 +268,10 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
 };
 
 /**
- * Inspects the given JSON object and returns the overall status.  This is 
+ * Inspects the given JSON object and returns the overall status.  This is
  * currently determined by whether the number of checkpoints and bitmaps match
  * for each disk.
- * 
+ *
  * @param {object} json The JSON object to get the overall status for
  * @returns {number} The overall status for the JSON object
  */
@@ -357,7 +366,7 @@ const printStatuses = (statuses) => {
     const statusColor =
       status.overallStatus === STATUS_OK ? 'greenBright' : 'yellowBright';
 
-      logger.info(
+    logger.info(
       `  Overall status: ${chalk.bold[statusColor](STATUSES.get(status.overallStatus))}`,
     );
 

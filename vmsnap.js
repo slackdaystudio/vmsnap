@@ -66,7 +66,7 @@ export const ERR_MAIN = 3;
 
 // Requirements error, something is missing that is required for the script to
 // operate.
-const ERR_REQS = 4;
+export const ERR_REQS = 4;
 
 // Scrub error, something went wrong during the scrubbing of checkpoints and
 // bitmaps.
@@ -209,7 +209,7 @@ const scrubCheckpointsAndBitmaps = async () => {
 
     scrubbed = true;
   } catch (err) {
-    logger.error(err.message);
+    logger.error(err.message, { code: ERR_SCRUB });
 
     scrubbed = false;
   }
