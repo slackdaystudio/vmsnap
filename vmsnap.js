@@ -48,6 +48,12 @@ import { backup } from './libs/libnbdbackup.js';
 // The screen size for the logger.
 export const SCREEN_SIZE = 80;
 
+// The YAML type
+const TYPE_YAML = 'YAML';
+
+// The JSON type
+const TYPE_JSON = 'JSON';
+
 // Error with the domains argument, usually indicates no domains were specified.
 const ERR_DOMAINS = 1;
 
@@ -129,13 +135,6 @@ export const logger = winston.createLogger({
 });
 
 /**
- * Fetches all domains found on the system.
- *
- * @returns {Promise<Array<string>} a list of all domains found on the system
- */
-const fetchDomains = async () => await fetchAllDomains();
-
-/**
  * Performs a backup on one or more VM domains by inspecting passed in command
  * line arguments.
  */
@@ -200,7 +199,7 @@ const scrubCheckpointsAndBitmaps = async () => {
   let scrubbed = false;
 
   try {
-    for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
+    for (const domain of await parseArrayParam(argv.domains, fetchAllDomains)) {
       logger.info(`Scrubbing domain: ${domain}`);
 
       await cleanupCheckpoints(domain);
@@ -218,79 +217,76 @@ const scrubCheckpointsAndBitmaps = async () => {
   return scrubbed;
 };
 
+/**
+ * Serializes the statuses and prints them to the console.
+ *
+ * @param {Array} statuses an array of statuses to print
+ */
+const printSerializedStatus = (statuses) => {
+  let serialized;
+  let type = TYPE_JSON;
+
+  if (argv.yml || argv.yaml) {
+    serialized = YAML.stringify(statuses);
+
+    type = TYPE_YAML;
+  } else {
+    serialized = argv.machine
+      ? JSON.stringify(statuses)
+      : JSON.stringify(statuses, undefined, 2);
+  }
+
+  if (argv.machine) {
+    logger.info(serialized);
+  } else {
+    logger.info(frame(type, serialized));
+  }
+};
+
 // Exit code for the script
 let exitCode = 0;
 
 // Run with a lock to prevent multiple instances from running
-lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
-  checkDependencies().catch((err) => {
-    logger.error(err);
+lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
+  try {
+    await checkDependencies();
 
-    releaseLock(ERR_REQS);
-  });
-
-  checkCommand(argv);
-
-  if (argv.scrub) {
-    scrubCheckpointsAndBitmaps()
-      .catch((err) => {
-        logger.error(err.message);
-
-        exitCode = err.code || ERR_SCRUB;
-      })
-      .finally(() => {
-        releaseLock(exitCode);
-      });
-  } else if (argv.backup) {
-    performBackup()
-      .catch((err) => {
-        logger.error(err.message);
-
-        exitCode = err.code || ERR_MAIN;
-      })
-      .finally(() => {
-        releaseLock(exitCode);
-      });
-  } else {
     if (argv.verbose) {
-      logger.info('Starting status check...');
+      logger.info('Dependencies are installed');
     }
 
-    spinner.start(`Querying for domains...${EOL}`);
+    checkCommand(argv);
 
-    status(argv.domains || '*', argv.output, argv.pretty)
-      .then((statuses) => {
-        spinner.stop();
+    if (argv.scrub) {
+      await scrubCheckpointsAndBitmaps();
+    } else if (argv.backup) {
+      await performBackup();
+    } else {
+      if (argv.verbose) {
+        logger.info('Starting status check...');
+      }
 
-        if (argv.json) {
-          if (argv.machine) {
-            logger.info(JSON.stringify(statuses));
-          } else {
-            logger.info(
-              frame('JSON', JSON.stringify(statuses, undefined, 2), true),
-            );
-          }
-        } else if (argv.yml || argv.yaml) {
-          if (argv.machine) {
-            logger.info(YAML.stringify(statuses));
-          } else {
-            logger.info(frame('YAML', YAML.stringify(statuses)));
-          }
-        } else {
-          printStatuses(statuses);
-        }
-      })
-      .catch((err) => {
-        spinner.stop();
+      spinner.start(`Querying for domains...${EOL}`);
 
-        logger.error(err.message);
+      const statuses = await status(
+        argv.domains || '*',
+        argv.output,
+        argv.pretty,
+      );
 
-        exitCode = err.code || ERR_MAIN;
-      })
-      .finally(() => {
-        spinner.stop();
+      spinner.stop();
 
-        releaseLock(exitCode);
-      });
+      if (argv.yml || argv.yaml || argv.json) {
+        printSerializedStatus(statuses);
+      } else {
+        printStatuses(statuses);
+      }
+    }
+  } catch (err) {
+    logger.error(err.message);
+
+    exitCode = err.code || ERR_MAIN;
+  } finally {
+    releaseLock(exitCode);
   }
 });
