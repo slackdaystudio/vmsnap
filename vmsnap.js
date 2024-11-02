@@ -300,6 +300,13 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
           printStatuses(statuses, argv.pretty);
         }
       })
+      .catch((err) => {
+        spinner.stop();
+
+        logger.error(err.message);
+
+        exitCode = err.code || ERR_MAIN;
+      })
       .finally(() => {
         spinner.stop();
 
