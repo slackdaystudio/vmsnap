@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { exec } from 'child_process';
 import util from 'util';
-import { tmpdir } from 'os';
+import { EOL, tmpdir } from 'os';
+import { sep } from 'path';
 import { rm } from 'fs/promises';
 import dayjs from 'dayjs';
 import Yargs from 'yargs';
@@ -78,7 +79,7 @@ export const ERR_LOCK_RELEASE = 6;
 export const spinner = yoctoSpinner();
 
 // Lock file for the script
-export const lockfile = `${tmpdir()}/vmsnap.lock`;
+export const lockfile = `${tmpdir()}${sep}vmsnap.lock`;
 
 // Need to promisify exec to use async/await
 export const asyncExec = util.promisify(exec);
@@ -168,7 +169,7 @@ const performBackup = async () => {
   }
 
   for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
-    const lastMonthsBackupsDir = `${argv.output}/${domain}/${getPreviousBackupFolder()}`;
+    const lastMonthsBackupsDir = `${argv.output}${sep}${domain}${sep}${getPreviousBackupFolder()}`;
 
     const todaysDay = dayjs().date();
 
@@ -275,7 +276,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
       logger.info('Starting status check...');
     }
 
-    spinner.start('Querying for domains...\n');
+    spinner.start(`Querying for domains...${EOL}`);
 
     status(argv.domains || '*', argv.output, argv.pretty)
       .then((statuses) => {

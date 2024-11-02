@@ -1,3 +1,4 @@
+import { sep } from 'path';
 import { asyncExec, logger } from '../vmsnap.js';
 import { findKeyByValue } from './general.js';
 import { fetchAllDisks } from './virsh.js';
@@ -37,7 +38,7 @@ const findBitmaps = async (domain) => {
         virtualSize: domainConfig['virtual-size'],
         actualSize: domainConfig['actual-size'],
         type,
-        name: disk.split('/').pop(),
+        name: disk.split(sep).pop(),
         path: disk,
         bitmaps:
           type === 'raw'

@@ -1,3 +1,4 @@
+import { EOL } from 'os';
 import { asyncExec } from '../vmsnap.js';
 import { logger } from '../vmsnap.js';
 
@@ -49,7 +50,7 @@ const fetchAllDomains = async () => {
     throw new Error(stderr);
   }
 
-  return stdout.split('\n').filter((d) => d.length > 0);
+  return stdout.split(EOL).filter((d) => d.length > 0);
 };
 
 /**
@@ -67,7 +68,7 @@ const findCheckpoints = async (domain) => {
     throw new Error(stderr);
   }
 
-  return stdout.split('\n').filter((c) => c.trim() !== '');
+  return stdout.split(EOL).filter((c) => c.trim() !== '');
 };
 
 /**
@@ -118,7 +119,7 @@ const fetchAllDisks = async (domain) => {
     throw new Error(stderr);
   }
 
-  for (const line of stdout.split('\n').slice(1)) {
+  for (const line of stdout.split(EOL).slice(1)) {
     const words = line.split(' ').filter((d) => d.length > 0);
 
     // Need at least 4 words to get the disk name

@@ -1,5 +1,5 @@
+import { sep } from 'path';
 import { spawn } from 'child_process';
-import dayjs from 'dayjs';
 import { logger } from '../vmsnap.js';
 import { domainExists } from './virsh.js';
 import { getBackupFolder } from './general.js';
@@ -32,7 +32,7 @@ const backup = async (domain, outputDir, raw = false) => {
     '-l',
     'auto',
     '-o',
-    `${outputDir}/${domain}/${getBackupFolder()}`,
+    `${outputDir}${sep}${domain}${sep}${getBackupFolder()}`,
   ];
 
   if (raw) {

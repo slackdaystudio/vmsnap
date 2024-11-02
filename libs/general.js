@@ -1,3 +1,5 @@
+import { EOL } from 'os';
+import { sep } from 'path';
 import { exit } from 'process';
 import { access, readdir, stat } from 'fs/promises';
 import dayjs from 'dayjs';
@@ -19,6 +21,9 @@ import { BACKUP } from './libnbdbackup.js';
  *
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
+
+// The format for the backup folder name
+const BACKUP_FOLDER_FORMAT = 'YYYY-MM';
 
 /**
  * Check if all dependencies are installed
@@ -73,7 +78,7 @@ const checkCommand = ({ status, scrub, backup }) => {
  *
  * @returns {string} the current months backup folder name
  */
-const getBackupFolder = () => dayjs().format('YYYY-MM');
+const getBackupFolder = () => dayjs().format(BACKUP_FOLDER_FORMAT);
 
 /**
  * Returns last months backup folder name.
@@ -81,7 +86,7 @@ const getBackupFolder = () => dayjs().format('YYYY-MM');
  * @returns {string} Previous month in the format YYYY-MM
  */
 const getPreviousBackupFolder = () => {
-  return dayjs().subtract(1, 'month').format('YYYY-MM');
+  return dayjs().subtract(1, 'month').format(BACKUP_FOLDER_FORMAT);
 };
 
 /**
@@ -138,7 +143,7 @@ const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
  */
 const isThisMonthsBackupCreated = async (domain, path) => {
   try {
-    await access(`${path}/${domain}/${getBackupFolder()}`);
+    await access(`${path}${sep}${domain}${sep}${getBackupFolder()}`);
 
     return true;
   } catch (error) {
@@ -201,14 +206,10 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
 
   let currentJson = {};
 
-  let domainDisks;
-
   for (const domain of domains) {
     const checkpoints = await findCheckpoints(domain);
 
     currentJson.checkpoints = [];
-
-    domainDisks = [...(await fetchAllDisks(domain)).keys()] || [];
 
     for (const checkpoint of checkpoints) {
       currentJson.checkpoints.push(checkpoint);
@@ -244,8 +245,6 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
       await addBackupStats(domain, json, path, pretty);
     }
 
-    domainDisks = undefined;
-
     currentJson = {};
   }
 
@@ -262,14 +261,14 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
 const addBackupStats = async (domain, json, path, pretty = false) => {
   const root = `${path}/${domain}/${getBackupFolder()}`;
 
-  const checkpoints = await readdir(`${root}/checkpoints`);
+  const checkpoints = await readdir(`${root}${sep}checkpoints`);
 
   let fsStats;
 
   let checkpointSize = 0;
 
   for (const checkpoint of checkpoints) {
-    const stats = await stat(`${root}/checkpoints/${checkpoint}`);
+    const stats = await stat(`${root}${sep}checkpoints${sep}${checkpoint}`);
 
     checkpointSize += stats.size;
   }
@@ -377,7 +376,7 @@ const printStatuses = (statuses, pretty = false) => {
 const frame = (prefix, text, trailingLb = false) => {
   const line = '-'.repeat(SCREEN_SIZE);
 
-  return `${prefix}:\n${line}\n${text}${trailingLb ? '\n' : ''}${line}`;
+  return `${prefix}:${EOL}${line}${EOL}${text}${trailingLb ? EOL : ''}${line}`;
 };
 
 export {
