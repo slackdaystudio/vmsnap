@@ -259,7 +259,7 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
  * @param {*} path the path to the backup directory root
  */
 const addBackupStats = async (domain, json, path, pretty = false) => {
-  const root = `${path}/${domain}/${getBackupFolder()}`;
+  const root = `${path}${sep}${domain}${sep}${getBackupFolder()}`;
 
   const checkpoints = await readdir(`${root}${sep}checkpoints`);
 
@@ -281,7 +281,7 @@ const addBackupStats = async (domain, json, path, pretty = false) => {
   };
 
   for (const item of await readdir(root)) {
-    fsStats = await stat(`${root}/${item}`);
+    fsStats = await stat(`${root}${sep}${item}`);
 
     if (fsStats.isDirectory()) {
       continue;
