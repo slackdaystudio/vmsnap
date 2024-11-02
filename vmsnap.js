@@ -9,6 +9,7 @@ import { lock } from 'lockfile';
 import * as winston from 'winston';
 import { consoleFormat } from 'winston-console-format';
 import * as YAML from 'json-to-pretty-yaml';
+import yoctoSpinner from 'yocto-spinner';
 import { cleanupCheckpoints, fetchAllDomains } from './libs/virsh.js';
 import { cleanupBitmaps } from './libs/qemu-img.js';
 import {
@@ -56,19 +57,25 @@ export const SCREEN_SIZE = 80;
 const ERR_DOMAINS = 1;
 
 // Error with the output directory argument, usually indicates no output
+// directory was specified.
 const ERR_OUTPUT_DIR = 2;
 
 // Main error, something went wrong during the main function.
 export const ERR_MAIN = 3;
 
 // Requirements error, something is missing that is required for the script to
+// operate.
 const ERR_REQS = 4;
 
 // Scrub error, something went wrong during the scrubbing of checkpoints and
+// bitmaps.
 const ERR_SCRUB = 5;
 
 // Lock release error, something went wrong releasing the lock file.
 export const ERR_LOCK_RELEASE = 6;
+
+// A spinnner for long running tasks
+export const spinner = yoctoSpinner();
 
 // Lock file for the script
 export const lockfile = `${tmpdir()}/vmsnap.lock`;
@@ -256,7 +263,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
   } else if (argv.backup) {
     performBackup()
       .catch((err) => {
-        logger.error(err.message, 2);
+        logger.error(err.message);
 
         exitCode = err.code || ERR_MAIN;
       })
@@ -264,8 +271,16 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         releaseLock(exitCode);
       });
   } else {
-    status(argv.domains || '*', argv.machine !== true, argv.output)
+    if (!argv.machine) {
+      logger.info('Starting status check...');
+    }
+
+    spinner.start('Querying for domains...\n');
+
+    status(argv.domains || '*', argv.output, argv.pretty)
       .then((statuses) => {
+        spinner.stop();
+
         if (argv.json) {
           if (argv.machine) {
             logger.info(JSON.stringify(statuses));
@@ -285,6 +300,8 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         }
       })
       .finally(() => {
+        spinner.stop();
+
         releaseLock(exitCode);
       });
   }
