@@ -110,18 +110,20 @@ vmsnap --domains="dom1" --status
 This could return the following information if ran, as an example.
 
 ```
-info:    ▪ Getting statuses for domains: dom1
-info:    ▪ Status for dom1:
-info:    ▪   Checkpoints found for dom1:
-info:    ▪     virtnbdbackup.0
-info:    ▪     virtnbdbackup.1
-info:    ▪   Eligible disks found for dom1:
-info:    ▪     vda
-info:    ▪       Virtual size: 107 GB
-info:    ▪       Actual size: 14.3 GB
-info:    ▪       Bitmaps found for vda:
-info:    ▪           virtnbdbackup.0
-info:    ▪           virtnbdbackup.1
+Status for dom1:
+  Overall status: OK
+  Checkpoints found for dom1:
+    virtnbdbackup.0
+    virtnbdbackup.1
+    virtnbdbackup.2
+  Eligible disks found for dom1:
+    vda
+      Virtual size: 107374182400
+      Actual size: 14286573568
+      Bitmaps found for vda:
+          virtnbdbackup.0
+          virtnbdbackup.1
+          virtnbdbackup.2
 ```
 
 >**Tip:** Pass in an `output=/PATH/TO/BACKUPS` flag to see statistics about the
@@ -144,7 +146,8 @@ vmsnap --domains="dom1" --machine --json
     "checkpoints": ["virtnbdbackup.0", "virtnbdbackup.1"],
     "disks": [
       { "disk": "vda", "bitmaps": ["virtnbdbackup.0", "virtnbdbackup.1"] }
-    ]
+    ],
+    "overallStatus": 0
   }
 }
 ```

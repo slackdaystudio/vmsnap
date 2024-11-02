@@ -2,17 +2,13 @@ import { EOL } from 'os';
 import { sep } from 'path';
 import { exit } from 'process';
 import { access, readdir, stat } from 'fs/promises';
+import chalk from 'chalk';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
 import prettyBytes from 'pretty-bytes';
 import { unlock } from 'lockfile';
 import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
-import {
-  fetchAllDisks,
-  fetchAllDomains,
-  findCheckpoints,
-  VIRSH,
-} from './virsh.js';
+import { fetchAllDomains, findCheckpoints, VIRSH } from './virsh.js';
 import { findBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
 
@@ -24,6 +20,15 @@ import { BACKUP } from './libnbdbackup.js';
 
 // The format for the backup folder name
 const BACKUP_FOLDER_FORMAT = 'YYYY-MM';
+
+const STATUS_OK = 0;
+
+const STATUS_INCONSISTENT = 1;
+
+const STATUSES = new Map([
+  [STATUS_OK, 'OK'],
+  [STATUS_INCONSISTENT, 'INCONSISTENT'],
+]);
 
 /**
  * Check if all dependencies are installed
@@ -239,6 +244,8 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
       diskJson = {};
     }
 
+    currentJson.overallStatus = getOverallStatus(currentJson);
+
     json[domain] = currentJson;
 
     if (path && typeof path === 'string') {
@@ -249,6 +256,34 @@ const status = async (rawDomains, path = undefined, pretty = false) => {
   }
 
   return json;
+};
+
+/**
+ * Inspects the given JSON object and returns the overall status.  This is 
+ * currently determined by whether the number of checkpoints and bitmaps match
+ * for each disk.
+ * 
+ * @param {object} json The JSON object to get the overall status for
+ * @returns {number} The overall status for the JSON object
+ */
+const getOverallStatus = (json) => {
+  let overallStatus = STATUS_OK;
+
+  const checkpoints = json.checkpoints;
+
+  let bitmaps = [];
+
+  for (const disk of json.disks) {
+    bitmaps = disk.bitmaps;
+
+    if (checkpoints.length !== bitmaps.length) {
+      overallStatus = STATUS_INCONSISTENT;
+
+      break;
+    }
+  }
+
+  return overallStatus;
 };
 
 /**
@@ -268,9 +303,9 @@ const addBackupStats = async (domain, json, path, pretty = false) => {
   let checkpointSize = 0;
 
   for (const checkpoint of checkpoints) {
-    const stats = await stat(`${root}${sep}checkpoints${sep}${checkpoint}`);
+    fsStats = await stat(`${root}${sep}checkpoints${sep}${checkpoint}`);
 
-    checkpointSize += stats.size;
+    checkpointSize += fsStats.size;
   }
 
   const stats = {
@@ -302,7 +337,6 @@ const addBackupStats = async (domain, json, path, pretty = false) => {
  * MB
  *
  * @param {number} size the bytes to print
- * @param {boolean} pretty whether to print the size in a pretty format or not
  * @returns {number|string} the size in bytes or a pretty formatted string
  */
 const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
@@ -314,11 +348,18 @@ const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
  * @param {boolean} pretty whether to print the statuses with formatted disk
  * sizes or not.
  */
-const printStatuses = (statuses, pretty = false) => {
+const printStatuses = (statuses) => {
   for (const domain of Object.keys(statuses)) {
     const status = statuses[domain];
 
-    logger.info(`Status for ${domain}:`);
+    logger.info(`Status for ${chalk.bold.magentaBright(domain)}:`);
+
+    const statusColor =
+      status.overallStatus === STATUS_OK ? 'greenBright' : 'yellowBright';
+
+      logger.info(
+      `  Overall status: ${chalk.bold[statusColor](STATUSES.get(status.overallStatus))}`,
+    );
 
     if (!status.checkpoints || status.checkpoints.length === 0) {
       logger.info(`  No checkpoints found for ${domain}`);
@@ -337,10 +378,8 @@ const printStatuses = (statuses, pretty = false) => {
 
       for (const disk of status.disks) {
         logger.info(`    ${disk.disk}`);
-        logger.info(
-          `      Virtual size: ${printSize(disk.virtualSize, pretty)}`,
-        );
-        logger.info(`      Actual size: ${printSize(disk.actualSize, pretty)}`);
+        logger.info(`      Virtual size: ${disk.virtualSize}`);
+        logger.info(`      Actual size: ${disk.actualSize}`);
 
         if (disk.bitmaps.length === 0) {
           logger.info(`      No bitmaps found for ${disk.disk}`);
@@ -358,9 +397,7 @@ const printStatuses = (statuses, pretty = false) => {
       logger.info(`  Backup directory stats for ${domain}:`);
       logger.info(`    Path: ${status.backupDirStats.path}`);
       logger.info(`    Total files: ${status.backupDirStats.totalFiles}`);
-      logger.info(
-        `    Total size: ${printSize(status.backupDirStats.totalSize, pretty)}`,
-      );
+      logger.info(`    Total size: ${status.backupDirStats.totalSize}`);
       logger.info(`    Checkpoints: ${status.backupDirStats.checkpoints}`);
     }
   }

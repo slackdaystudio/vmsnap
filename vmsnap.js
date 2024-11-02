@@ -45,14 +45,8 @@ import { backup } from './libs/libnbdbackup.js';
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
-/**
- * The screen size for the logger.
- */
+// The screen size for the logger.
 export const SCREEN_SIZE = 80;
-
-/**
- * Error codes for the script.
- */
 
 // Error with the domains argument, usually indicates no domains were specified.
 const ERR_DOMAINS = 1;
@@ -88,60 +82,46 @@ export const asyncExec = util.promisify(exec);
 const argv = Yargs(process.argv.slice(2)).argv;
 
 // The formats for the logger
-let formats = [
-  winston.format.timestamp(),
-  winston.format.errors({ stack: true }),
-  winston.format.splat(),
-  winston.format.json(),
-];
-
-// Add the ms format if the verbose flag is set
-if (argv.verbose) {
-  formats.push(winston.format.ms());
-}
+let formats = [];
 
 // The console format options
-let consoleFormatOptions = [
-  winston.format.colorize({ all: true }),
-  winston.format.padLevels(),
-  consoleFormat({
-    showMeta: true,
-    metaStrip: ['timestamp', 'service'],
-    inspectOptions: {
-      depth: Infinity,
-      colors: true,
-      maxArrayLength: Infinity,
-      breakLength: SCREEN_SIZE,
-      compact: Infinity,
-    },
-  }),
-];
+let consoleFormatOptions = [winston.format.printf((info) => `${info.message}`)];
 
-/**
- * If the machine flag is set, we need to remove the colorize format and the
- * padLevels, etc.  We only want to return an unformatted message.
- *
- * This is useful for machine readable output when using the status command.
- *
- * Example 1: npm run -s vmsnap -- --domains=vm1,vm2,etc --machine --json
- *
- * Example 2: npm run -s vmsnap -- --domains=vm1,vm2,etc --machine --yml
- */
-if (argv.machine) {
-  formats = [];
+// If the verbose flag is set, add the colorize and pretty print options
+if (argv.verbose) {
+  // The formats for the logger
+  formats = [
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json(),
+    winston.format.ms(),
+  ];
 
-  consoleFormatOptions = [];
-
-  consoleFormatOptions.push(winston.format.printf(({ message }) => message));
+  consoleFormatOptions = [
+    winston.format.colorize(),
+    winston.format.splat({ depth: Infinity }),
+    consoleFormat({
+      showMeta: true,
+      metaStrip: ['timestamp', 'service'],
+      inspectOptions: {
+        depth: Infinity,
+        colors: true,
+        maxArrayLength: Infinity,
+        breakLength: SCREEN_SIZE,
+        compact: Infinity,
+      },
+    }),
+  ];
 }
 
 // The logger for the app.
 export const logger = winston.createLogger({
-  levels: winston.config.syslog.levels,
   format: winston.format.combine(...formats),
   defaultMeta: { service: 'vmsnap' },
   transports: [
     new winston.transports.Console({
+      levels: winston.config.cli.levels,
       silent: false,
       format: winston.format.combine(...consoleFormatOptions),
     }),
@@ -272,7 +252,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
         releaseLock(exitCode);
       });
   } else {
-    if (!argv.machine) {
+    if (argv.verbose) {
       logger.info('Starting status check...');
     }
 
@@ -297,7 +277,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, () => {
             logger.info(frame('YAML', YAML.stringify(statuses)));
           }
         } else {
-          printStatuses(statuses, argv.pretty);
+          printStatuses(statuses);
         }
       })
       .catch((err) => {
