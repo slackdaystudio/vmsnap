@@ -302,6 +302,7 @@ const addBackupStats = async (domain, json, path, pretty = false) => {
  * MB
  *
  * @param {number} size the bytes to print
+ * @param {boolean} pretty whether to print the size in a pretty format or not
  * @returns {number|string} the size in bytes or a pretty formatted string
  */
 const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
