@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import commandExists from 'command-exists';
 import prettyBytes from 'pretty-bytes';
 import { unlock } from 'lockfile';
-import { ERR_MAIN, lockfile, logger, SCREEN_SIZE, spinner } from '../vmsnap.js';
+import { ERR_MAIN, lockfile, logger, SCREEN_SIZE } from '../vmsnap.js';
 import {
   fetchAllDisks,
   fetchAllDomains,
