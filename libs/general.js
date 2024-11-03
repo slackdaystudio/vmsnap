@@ -1,22 +1,21 @@
-import { EOL } from 'os';
 import { sep } from 'path';
 import { exit } from 'process';
 import { access, readdir, stat } from 'fs/promises';
-import chalk from 'chalk';
 import dayjs from 'dayjs';
 import commandExists from 'command-exists';
-import prettyBytes from 'pretty-bytes';
 import { unlock } from 'lockfile';
 import {
+  ERR_DOMAINS,
   ERR_MAIN,
   ERR_REQS,
+  ERR_SCRUB,
   lockfile,
   logger,
-  SCREEN_SIZE,
 } from '../vmsnap.js';
 import { fetchAllDomains, findCheckpoints, VIRSH } from './virsh.js';
 import { findBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
+import { printSize } from './print.js';
 
 /**
  * General functions used by vmsnap.
@@ -27,11 +26,15 @@ import { BACKUP } from './libnbdbackup.js';
 // The format for the backup folder name
 const BACKUP_FOLDER_FORMAT = 'YYYY-MM';
 
-const STATUS_OK = 0;
+// The all-clear code for the status of a domain
+export const STATUS_OK = 0;
 
-const STATUS_INCONSISTENT = 1;
+// This code means the domain is in an inconsistent backup state.  Take a look
+// at the checkpoints and bitmaps to see what's going on.
+export const STATUS_INCONSISTENT = 1;
 
-const STATUSES = new Map([
+// The domains overall status codes
+export const STATUSES = new Map([
   [STATUS_OK, 'OK'],
   [STATUS_INCONSISTENT, 'INCONSISTENT'],
 ]);
@@ -163,6 +166,40 @@ const isThisMonthsBackupCreated = async (domain, path) => {
   } catch (error) {
     return false;
   }
+};
+
+/**
+ * Scrubs off the checkpoints and bitmaps for the domains passed in.
+ *
+ * @returns {Promise<boolean>} true if the scrubbing was successful, false if
+ * there was a failure.
+ */
+const scrubCheckpointsAndBitmaps = async (domains) => {
+  if (!domains) {
+    throw new Error('No domains specified', { code: ERR_DOMAINS });
+  }
+
+  logger.info('Scrubbing checkpoints and bitmaps');
+
+  let scrubbed = false;
+
+  try {
+    for (const domain of await parseArrayParam(domains, fetchAllDomains)) {
+      logger.info(`Scrubbing domain: ${domain}`);
+
+      await cleanupCheckpoints(domain);
+
+      await cleanupBitmaps(domain);
+    }
+
+    scrubbed = true;
+  } catch (err) {
+    logger.error(err.message, { code: ERR_SCRUB });
+
+    scrubbed = false;
+  }
+
+  return scrubbed;
 };
 
 /**
@@ -341,91 +378,6 @@ const addBackupStats = async (domain, json, path, pretty = false) => {
   };
 };
 
-/**
- * Will print the size in bytes or a pretty formatted string like 25 GB or 1.5
- * MB
- *
- * @param {number} size the bytes to print
- * @returns {number|string} the size in bytes or a pretty formatted string
- */
-const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
-
-/**
- * Prints the status of the specified domains.
- *
- * @param {Array<object>} statuses the statuses to print
- * @param {boolean} pretty whether to print the statuses with formatted disk
- * sizes or not.
- */
-const printStatuses = (statuses) => {
-  for (const domain of Object.keys(statuses)) {
-    const status = statuses[domain];
-
-    logger.info(`Status for ${chalk.bold.magentaBright(domain)}:`);
-
-    const statusColor =
-      status.overallStatus === STATUS_OK ? 'greenBright' : 'yellowBright';
-
-    logger.info(
-      `  Overall status: ${chalk.bold[statusColor](STATUSES.get(status.overallStatus))}`,
-    );
-
-    if (!status.checkpoints || status.checkpoints.length === 0) {
-      logger.info(`  No checkpoints found for ${domain}`);
-    } else {
-      logger.info(`  Checkpoints found for ${domain}:`);
-
-      for (const checkpoint of status.checkpoints) {
-        logger.info(`    ${checkpoint}`);
-      }
-    }
-
-    if (status.disks.length === 0) {
-      logger.info(`  No eligible disks found for ${domain}`);
-    } else {
-      logger.info(`  Eligible disks found for ${domain}:`);
-
-      for (const disk of status.disks) {
-        logger.info(`    ${disk.disk}`);
-        logger.info(`      Virtual size: ${disk.virtualSize}`);
-        logger.info(`      Actual size: ${disk.actualSize}`);
-
-        if (disk.bitmaps.length === 0) {
-          logger.info(`      No bitmaps found for ${disk.disk}`);
-        } else {
-          logger.info(`      Bitmaps found for ${disk.disk}:`);
-
-          for (const bitmap of disk.bitmaps) {
-            logger.info(`          ${bitmap}`);
-          }
-        }
-      }
-    }
-
-    if (status.backupDirStats) {
-      logger.info(`  Backup directory stats for ${domain}:`);
-      logger.info(`    Path: ${status.backupDirStats.path}`);
-      logger.info(`    Total files: ${status.backupDirStats.totalFiles}`);
-      logger.info(`    Total size: ${status.backupDirStats.totalSize}`);
-      logger.info(`    Checkpoints: ${status.backupDirStats.checkpoints}`);
-    }
-  }
-};
-
-/**
- * Frames text with a prefix and a line of hyphens.
- *
- * @param {string} prefix The prefix to display before the frame
- * @param {*} text The text to display in the frame
- * @param {boolean} trailingLb Whether to add a trailing line break
- * @returns {string} The framed text
- */
-const frame = (prefix, text, trailingLb = false) => {
-  const line = '-'.repeat(SCREEN_SIZE);
-
-  return `${prefix}:${EOL}${line}${EOL}${text}${trailingLb ? EOL : ''}${line}`;
-};
-
 export {
   checkDependencies,
   checkCommand,
@@ -434,9 +386,8 @@ export {
   parseArrayParam,
   isThisMonthsBackupCreated,
   isLastMonthsBackupCreated,
+  scrubCheckpointsAndBitmaps,
   releaseLock,
   findKeyByValue,
-  status,
-  printStatuses,
-  frame,
+  status
 };

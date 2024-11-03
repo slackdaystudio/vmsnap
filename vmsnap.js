@@ -1,31 +1,21 @@
 #!/usr/bin/env node
 import { exec } from 'child_process';
 import util from 'util';
-import { EOL, tmpdir } from 'os';
+import { tmpdir } from 'os';
 import { sep } from 'path';
-import { rm } from 'fs/promises';
-import dayjs from 'dayjs';
 import Yargs from 'yargs';
 import { lock } from 'lockfile';
 import * as winston from 'winston';
 import { consoleFormat } from 'winston-console-format';
-import * as YAML from 'json-to-pretty-yaml';
 import yoctoSpinner from 'yocto-spinner';
-import { cleanupCheckpoints, fetchAllDomains } from './libs/virsh.js';
-import { cleanupBitmaps } from './libs/qemu-img.js';
 import {
   checkCommand,
   checkDependencies,
-  frame,
-  getPreviousBackupFolder,
-  isLastMonthsBackupCreated,
-  isThisMonthsBackupCreated,
-  parseArrayParam,
-  printStatuses,
   releaseLock,
-  status,
+  scrubCheckpointsAndBitmaps,
 } from './libs/general.js';
-import { backup } from './libs/libnbdbackup.js';
+import { performBackup } from './libs/libnbdbackup.js';
+import { printStatusCheck, SCREEN_SIZE } from './libs/print.js';
 
 /**
  * This script is designed to backup KVM virtual machines using the
@@ -45,21 +35,18 @@ import { backup } from './libs/libnbdbackup.js';
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
-// The screen size for the logger.
-export const SCREEN_SIZE = 80;
-
 // The YAML type
-const TYPE_YAML = 'YAML';
+export const TYPE_YAML = 'YAML';
 
 // The JSON type
-const TYPE_JSON = 'JSON';
+export const TYPE_JSON = 'JSON';
 
 // Error with the domains argument, usually indicates no domains were specified.
-const ERR_DOMAINS = 1;
+export const ERR_DOMAINS = 1;
 
 // Error with the output directory argument, usually indicates no output
 // directory was specified.
-const ERR_OUTPUT_DIR = 2;
+export const ERR_OUTPUT_DIR = 2;
 
 // Main error, something went wrong during the main function.
 export const ERR_MAIN = 3;
@@ -70,7 +57,7 @@ export const ERR_REQS = 4;
 
 // Scrub error, something went wrong during the scrubbing of checkpoints and
 // bitmaps.
-const ERR_SCRUB = 5;
+export const ERR_SCRUB = 5;
 
 // Lock release error, something went wrong releasing the lock file.
 export const ERR_LOCK_RELEASE = 6;
@@ -134,115 +121,6 @@ export const logger = winston.createLogger({
   ],
 });
 
-/**
- * Performs a backup on one or more VM domains by inspecting passed in command
- * line arguments.
- */
-const performBackup = async () => {
-  if (!argv.domains) {
-    throw new Error('No domains specified', { code: ERR_DOMAINS });
-  }
-
-  if (!argv.output) {
-    throw new Error('No output directory specified', { code: ERR_OUTPUT_DIR });
-  }
-
-  for (const domain of await parseArrayParam(argv.domains, fetchDomains)) {
-    const lastMonthsBackupsDir = `${argv.output}${sep}${domain}${sep}${getPreviousBackupFolder()}`;
-
-    const todaysDay = dayjs().date();
-
-    // If it's the first of the month, run a cleanup for any the bitmaps and
-    // checkpoints found for the domain.
-    if (
-      todaysDay >= 1 &&
-      todaysDay <= 14 &&
-      !(await isThisMonthsBackupCreated(domain, argv.output))
-    ) {
-      logger.info('Creating a new backup directory, running bitmap cleanup');
-
-      await cleanupCheckpoints(domain);
-
-      await cleanupBitmaps(domain);
-    }
-
-    await backup(domain, argv.output, argv.raw);
-
-    // If it's the middle of the month, run a cleanup of the previous month's
-    // backups if they exist and the prune flag is set.
-    if (
-      argv.prune === 'true' &&
-      todaysDay >= 15 &&
-      (await isLastMonthsBackupCreated(lastMonthsBackupsDir))
-    ) {
-      logger.info('Middle of the month, running cleanup');
-
-      // Delete last months backups
-      await rm(lastMonthsBackupsDir, { recursive: true, force: true });
-    }
-  }
-};
-
-/**
- * Scrubs off the checkpoints and bitmaps for the domains passed in.
- *
- * @returns {Promise<boolean>} true if the scrubbing was successful, false if
- * there was a failure.
- */
-const scrubCheckpointsAndBitmaps = async () => {
-  if (!argv.domains) {
-    throw new Error('No domains specified', { code: ERR_DOMAINS });
-  }
-
-  logger.info('Scrubbing checkpoints and bitmaps');
-
-  let scrubbed = false;
-
-  try {
-    for (const domain of await parseArrayParam(argv.domains, fetchAllDomains)) {
-      logger.info(`Scrubbing domain: ${domain}`);
-
-      await cleanupCheckpoints(domain);
-
-      await cleanupBitmaps(domain);
-    }
-
-    scrubbed = true;
-  } catch (err) {
-    logger.error(err.message, { code: ERR_SCRUB });
-
-    scrubbed = false;
-  }
-
-  return scrubbed;
-};
-
-/**
- * Serializes the statuses and prints them to the console.
- *
- * @param {Array} statuses an array of statuses to print
- */
-const printSerializedStatus = (statuses) => {
-  let serialized;
-  let type = TYPE_JSON;
-
-  if (argv.yml || argv.yaml) {
-    serialized = YAML.stringify(statuses);
-
-    type = TYPE_YAML;
-  } else {
-    serialized = argv.machine
-      ? JSON.stringify(statuses)
-      : JSON.stringify(statuses, undefined, 2);
-  }
-
-  if (argv.machine) {
-    logger.info(serialized);
-  } else {
-    logger.info(frame(type, serialized));
-  }
-};
-
 // Exit code for the script
 let exitCode = 0;
 
@@ -260,33 +138,19 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
     if (argv.scrub) {
       await scrubCheckpointsAndBitmaps();
     } else if (argv.backup) {
-      await performBackup();
+      await performBackup(argv);
     } else {
-      if (argv.verbose) {
-        logger.info('Starting status check...');
-      }
-
-      spinner.start(`Querying for domains...${EOL}`);
-
-      const statuses = await status(
-        argv.domains || '*',
-        argv.output,
-        argv.pretty,
-      );
-
-      spinner.stop();
-
-      if (argv.yml || argv.yaml || argv.json) {
-        printSerializedStatus(statuses);
-      } else {
-        printStatuses(statuses);
-      }
+      await printStatusCheck(argv);
     }
   } catch (err) {
+    spinner.stop();
+
     logger.error(err.message);
 
     exitCode = err.code || ERR_MAIN;
   } finally {
+    spinner.stop();
+
     releaseLock(exitCode);
   }
 });
