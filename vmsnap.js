@@ -35,12 +35,6 @@ import { printStatusCheck, SCREEN_SIZE } from './libs/print.js';
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
 
-// The YAML type
-export const TYPE_YAML = 'YAML';
-
-// The JSON type
-export const TYPE_JSON = 'JSON';
-
 // Error with the domains argument, usually indicates no domains were specified.
 export const ERR_DOMAINS = 1;
 
@@ -136,7 +130,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
     checkCommand(argv);
 
     if (argv.scrub) {
-      await scrubCheckpointsAndBitmaps();
+      await scrubCheckpointsAndBitmaps(argv.domains);
     } else if (argv.backup) {
       await performBackup(argv);
     } else {

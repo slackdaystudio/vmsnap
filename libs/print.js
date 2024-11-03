@@ -2,11 +2,17 @@ import { EOL, machine } from 'os';
 import chalk from 'chalk';
 import prettyBytes from 'pretty-bytes';
 import * as YAML from 'json-to-pretty-yaml';
-import { spinner, logger, TYPE_JSON, TYPE_YAML } from '../vmsnap.js';
+import { spinner, logger } from '../vmsnap.js';
 import { status, STATUS_OK, STATUSES } from './general.js';
 
 // The screen size for the logger.
 export const SCREEN_SIZE = 80;
+
+// The YAML type
+export const TYPE_YAML = 'YAML';
+
+// The JSON type
+export const TYPE_JSON = 'JSON';
 
 /**
  * 
@@ -54,8 +60,6 @@ const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
  * Prints the status of the specified domains.
  *
  * @param {Array<object>} statuses the statuses to print
- * @param {boolean} pretty whether to print the statuses with formatted disk
- * sizes or not.
  */
 const printStatuses = (statuses) => {
   for (const domain of Object.keys(statuses)) {

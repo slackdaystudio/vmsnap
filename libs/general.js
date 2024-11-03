@@ -12,8 +12,13 @@ import {
   lockfile,
   logger,
 } from '../vmsnap.js';
-import { fetchAllDomains, findCheckpoints, VIRSH } from './virsh.js';
-import { findBitmaps, QEMU_IMG } from './qemu-img.js';
+import {
+  cleanupCheckpoints,
+  fetchAllDomains,
+  findCheckpoints,
+  VIRSH,
+} from './virsh.js';
+import { cleanupBitmaps, findBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
 import { printSize } from './print.js';
 
@@ -389,5 +394,5 @@ export {
   scrubCheckpointsAndBitmaps,
   releaseLock,
   findKeyByValue,
-  status
+  status,
 };
