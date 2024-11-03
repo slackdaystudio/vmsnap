@@ -6,7 +6,6 @@ import commandExists from 'command-exists';
 import { unlock } from 'lockfile';
 import {
   ERR_DOMAINS,
-  ERR_MAIN,
   ERR_REQS,
   ERR_SCRUB,
   lockfile,
@@ -43,6 +42,8 @@ export const STATUSES = new Map([
   [STATUS_OK, 'OK'],
   [STATUS_INCONSISTENT, 'INCONSISTENT'],
 ]);
+
+const FOLDER_RECURSION_LIMIT = 3;
 
 /**
  * Check if all dependencies are installed
@@ -89,9 +90,10 @@ const checkCommand = ({ status, scrub, backup }) => {
   }
 
   if (commandCount > 1) {
-    logger.error('Only one command can be run at a time');
-
-    releaseLock(ERR_MAIN);
+    throw new Error(
+      'Only one command can be run at a time',
+      ERR_TO_MANY_COMMANDS,
+    );
   }
 };
 
@@ -138,6 +140,16 @@ const parseArrayParam = async (param, fetchAll = async () => []) => {
   return parsed;
 };
 
+const fileExists = async (path) => {
+  try {
+    await access(path);
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 /**
  * Checks to see if the last month's backups directory exists.
  *
@@ -146,13 +158,7 @@ const parseArrayParam = async (param, fetchAll = async () => []) => {
  * @returns true if the last month's backups directory exists, false otherwise
  */
 const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
-  try {
-    await access(lastMonthsBackupsDir);
-
-    return true;
-  } catch (error) {
-    return false;
-  }
+  return await fileExists(lastMonthsBackupsDir);
 };
 
 /**
@@ -164,13 +170,7 @@ const isLastMonthsBackupCreated = async (lastMonthsBackupsDir) => {
  * @returns true if the backup directory for the domain exists, false otherwise
  */
 const isThisMonthsBackupCreated = async (domain, path) => {
-  try {
-    await access(`${path}${sep}${domain}${sep}${getBackupFolder()}`);
-
-    return true;
-  } catch (error) {
-    return false;
-  }
+  return await fileExists(`${path}${sep}${domain}${sep}${getBackupFolder()}`);
 };
 
 /**
@@ -224,7 +224,7 @@ const releaseLock = (exitCode) => {
       exit(ERR_LOCK_RELEASE);
     }
 
-    exit(exitCode || 99);
+    exit(parseInt(exitCode) || 99);
   });
 };
 
@@ -343,44 +343,78 @@ const getOverallStatus = (json) => {
  * @param {string} domain the domain to add backup stats for
  * @param {*} json the JSON object to add the stats to
  * @param {*} path the path to the backup directory root
+ * @param {boolean} pretty whether to pretty print the size of disks or not
  */
 const addBackupStats = async (domain, json, path, pretty = false) => {
-  const root = `${path}${sep}${domain}${sep}${getBackupFolder()}`;
-
-  const checkpoints = await readdir(`${root}${sep}checkpoints`);
-
-  let fsStats;
-
-  let checkpointSize = 0;
-
-  for (const checkpoint of checkpoints) {
-    fsStats = await stat(`${root}${sep}checkpoints${sep}${checkpoint}`);
-
-    checkpointSize += fsStats.size;
-  }
-
   const stats = {
-    path: root,
-    totalFiles: checkpoints.length,
-    checkpoints: checkpoints.length,
-    totalSize: checkpointSize,
+    path: null,
+    totalFiles: 0,
+    checkpoints: 0,
+    totalSize: 0,
   };
 
-  for (const item of await readdir(root)) {
-    fsStats = await stat(`${root}${sep}${item}`);
+  const rootDir = `${path}${sep}${domain}${sep}${getBackupFolder()}`;
 
-    if (fsStats.isDirectory()) {
-      continue;
+  const checkpointDir = `${rootDir}${sep}checkpoints`;
+
+  if ((await fileExists(rootDir)) && (await fileExists(checkpointDir))) {
+    const checkpoints = await readdir(`${rootDir}${sep}checkpoints`);
+
+    let fsStats;
+
+    let checkpointSize = 0;
+
+    for (const checkpoint of checkpoints) {
+      fsStats = await stat(`${rootDir}${sep}checkpoints${sep}${checkpoint}`);
+
+      checkpointSize += fsStats.size;
     }
 
-    stats.totalFiles++;
-    stats.totalSize += fsStats.size;
+    stats.path = rootDir;
+    stats.totalFiles = checkpoints.length;
+    stats.checkpoints = checkpoints.length;
+    stats.totalSize = checkpointSize;
+
+    await collectDirStats(stats, rootDir);
   }
 
   json[domain].backupDirStats = {
     ...stats,
     totalSize: printSize(stats.totalSize, pretty),
   };
+};
+
+/**
+ * Drills down into the directory and collects stats for the directory and its
+ * child directories up FOLDER_RECURSION_LIMIT levels.
+ *
+ * Recursion.
+ *
+ * @param {*} stats the stats object to add stats to
+ * @param {*} path the path to the directory to collect stats for
+ * @execCount {number} the number of times the function been called recursively
+ */
+const collectDirStats = async (stats, path, recursionCount = 0) => {
+  if (recursionCount === FOLDER_RECURSION_LIMIT) {
+    throw new Error(`Recursion limit reached for ${path}`);
+  }
+
+  let fsStats;
+
+  let currentPath;
+
+  for (const item of await readdir(path)) {
+    currentPath = `${path}${sep}${item}`;
+
+    fsStats = await stat(currentPath);
+
+    if (fsStats.isDirectory()) {
+      collectDirStats(stats, currentPath, ++recursionCount);
+    }
+
+    stats.totalFiles++;
+    stats.totalSize += fsStats.size;
+  }
 };
 
 export {

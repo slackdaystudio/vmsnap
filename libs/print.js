@@ -1,4 +1,4 @@
-import { EOL, machine } from 'os';
+import { EOL } from 'os';
 import chalk from 'chalk';
 import prettyBytes from 'pretty-bytes';
 import * as YAML from 'json-to-pretty-yaml';
@@ -15,13 +15,13 @@ export const TYPE_YAML = 'YAML';
 export const TYPE_JSON = 'JSON';
 
 /**
- * 
+ * Prints out the status of the specified domains.
  * 
  * @param {Object} args the command line arguments (domains, verbose, output, 
  * pretty, machine, yml, yaml, json) 
  */
 const printStatusCheck = async ({
-  domains,
+  domains = '*',
   verbose,
   output,
   pretty,
@@ -36,7 +36,7 @@ const printStatusCheck = async ({
 
   spinner.start(`Querying for domains...${EOL}`);
 
-  const statuses = await status(domains || '*', output, pretty);
+  const statuses = await status(domains, output, pretty);
 
   spinner.stop();
 

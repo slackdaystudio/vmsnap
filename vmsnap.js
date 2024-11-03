@@ -22,7 +22,7 @@ import { printStatusCheck, SCREEN_SIZE } from './libs/print.js';
  * virtnbdbackup utility.  It relies on the virsh and qemu-img utilities as well
  * so please make sure you have them installed.
  *
- * Usage: node index.js --domains=<domain> --output=<output directory>
+ * Usage: node vmsnap.js --domains=<domain> --output=<output directory>
  *
  * --domains: Comma-separated list of domains to backup.  Use '*' to backup all
  * domains.
@@ -53,8 +53,11 @@ export const ERR_REQS = 4;
 // bitmaps.
 export const ERR_SCRUB = 5;
 
-// Lock release error, something went wrong releasing the lock file.
+// Lock release error, something went wrong releasing the lock.
 export const ERR_LOCK_RELEASE = 6;
+
+// More than one command was specified.
+export const ERR_TO_MANY_COMMANDS = 7;
 
 // A spinnner for long running tasks
 export const spinner = yoctoSpinner();
