@@ -1,9 +1,9 @@
 import { EOL } from 'os';
 import chalk from 'chalk';
-import prettyBytes from 'pretty-bytes';
 import * as YAML from 'json-to-pretty-yaml';
 import { spinner, logger } from '../vmsnap.js';
-import { status, STATUS_OK, STATUSES } from './general.js';
+import { getStatus, STATUS_OK, STATUSES } from './serialization.js';
+import { FREQUENCY_MONTHLY } from './libnbdbackup.js';
 
 // The screen size for the logger.
 export const SCREEN_SIZE = 80;
@@ -16,9 +16,9 @@ export const TYPE_JSON = 'JSON';
 
 /**
  * Prints out the status of the specified domains.
- * 
- * @param {Object} args the command line arguments (domains, verbose, output, 
- * pretty, machine, yml, yaml, json) 
+ *
+ * @param {Object} args the command line arguments (domains, verbose, output,
+ * pretty, machine, yml, yaml, json)
  */
 const printStatusCheck = async ({
   domains = '*',
@@ -26,6 +26,7 @@ const printStatusCheck = async ({
   output,
   pretty,
   machine,
+  groupBy = FREQUENCY_MONTHLY,
   yml = false,
   yaml = false,
   json = false,
@@ -36,7 +37,7 @@ const printStatusCheck = async ({
 
   spinner.start(`Querying for domains...${EOL}`);
 
-  const statuses = await status(domains, output, pretty);
+  const statuses = await getStatus(domains, output, groupBy, pretty);
 
   spinner.stop();
 
@@ -46,15 +47,6 @@ const printStatusCheck = async ({
     printStatuses(statuses);
   }
 };
-
-/**
- * Will print the size in bytes or a pretty formatted string like 25 GB or 1.5
- * MB
- *
- * @param {number} size the bytes to print
- * @returns {number|string} the size in bytes or a pretty formatted string
- */
-const printSize = (size, pretty = false) => (pretty ? prettyBytes(size) : size);
 
 /**
  * Prints the status of the specified domains.
@@ -153,4 +145,4 @@ const printSerializedStatus = (statuses, yml, yaml, machine) => {
   }
 };
 
-export { printStatusCheck, printSize };
+export { printStatusCheck };

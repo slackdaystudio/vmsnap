@@ -1,17 +1,17 @@
 #!/usr/bin/env node
+import { exit } from 'process';
 import { exec } from 'child_process';
 import util from 'util';
 import { tmpdir } from 'os';
 import { sep } from 'path';
 import Yargs from 'yargs';
-import { lock } from 'lockfile';
+import { lock, unlock } from 'lockfile';
 import * as winston from 'winston';
 import { consoleFormat } from 'winston-console-format';
 import yoctoSpinner from 'yocto-spinner';
 import {
   checkCommand,
   checkDependencies,
-  releaseLock,
   scrubCheckpointsAndBitmaps,
 } from './libs/general.js';
 import { performBackup } from './libs/libnbdbackup.js';
@@ -63,7 +63,7 @@ export const ERR_TO_MANY_COMMANDS = 7;
 export const spinner = yoctoSpinner();
 
 // Lock file for the script
-export const lockfile = `${tmpdir()}${sep}vmsnap.lock`;
+const lockfile = `${tmpdir()}${sep}vmsnap.lock`;
 
 // Need to promisify exec to use async/await
 export const asyncExec = util.promisify(exec);
@@ -148,6 +148,18 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
   } finally {
     spinner.stop();
 
-    releaseLock(exitCode);
+    if (exitCode === undefined) {
+      logger.info('No exit code provided for lock release');
+    }
+
+    unlock(lockfile, (err) => {
+      if (err) {
+        logger.error(err);
+
+        exit(ERR_LOCK_RELEASE);
+      }
+
+      exit(exitCode || ERR_MAIN);
+    });
   }
 });

@@ -27,12 +27,14 @@ Run the following command if you are not sure if you have them on your host OS.
  ```sh
 which virsh && which qemu-img && which virtnbdbackup
  ```
-You should see something like the following.
+You should see something like the following, assuming you have everything 
+installed on your host.
 ```
 /usr/bin/virsh
 /usr/bin/qemu-img
 /usr/bin/virtnbdbackup
 ```
+
 ## Installation
 
 To install VMSnap, follow these steps:
@@ -73,22 +75,23 @@ command. Doing so will install VMSnap which includes a vmsnap bin.
 
 The following CLI switches are available when invoking VMSnap.
 
-| Switch  | Status | Backup | Scrub  |  Type   |                     Examples/Notes                       |
-|---------|--------|--------|--------|---------|----------------------------------------------------------|
-| domains | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                            |
-| status  | ✅     | -      | -      | boolean | Querys the domain(s)                                     |
-| backup  | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                 |
-| scrub   | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain         |
-| output  | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed      |
-| verbose | ✅     | -      | -      | boolean | Prints out extra information when running a status check |
-| machine | ✅     | -      | -      | boolean | Removes some output from the status command              |
-| json    | ✅     | -      | -      | boolean | Outputs the status command is JSON                       |
-| yaml    | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`) |
-| raw     | -      | ✅     | -      | boolean | Enables raw disk handling                                |
-| prune   | -      | ✅     | -      | boolean | Rotates backups by **deleting** last months backup*      |
-| pretty  | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)          |
+| Switch     | Status | Backup | Scrub  |  Type   |                     Examples/Notes                                |
+|------------|--------|--------|--------|---------|-------------------------------------------------------------------|
+| domains    | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                                     |
+| status     | ✅     | -      | -      | boolean | Querys the domain(s)                                              |
+| backup     | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                          |
+| scrub      | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain                  |
+| output     | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed               |
+| verbose    | ✅     | -      | -      | boolean | Prints out extra information when running a status check          |
+| machine    | ✅     | -      | -      | boolean | Removes some output from the status command                       |
+| json       | ✅     | -      | -      | boolean | Outputs the status command is JSON                                |
+| yaml       | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`)          |
+| raw        | -      | ✅     | -      | boolean | Enables raw disk handling                                         |
+| groupBy    | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, or year) | 
+| prune      | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*              |
+| pretty     | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                   |
 
-*\*This happens on or after the 15th of the current month*
+*\*This happens on or after the the middle of the current period (15 days monthly, 45 days quarterly or 180 yearly)*
 
 ### Status
 
@@ -170,17 +173,31 @@ directory.
 
 > **Tip:** Make sure you can read and write to the target directory in `--output`
 
+You may also specify the `--groupBy` flag to tell VMSnap how to group your files
+on disk. Look at the table below for more information.
+
+| groupBy Flag | Middle Mark | Sample name                     |
+|--------------|-------------|---------------------------------|
+| month        | 15d         | vmsnap-backup-monthly-2024-11   |
+| quarter      | 45d         | vmsnap-backup-quarterly-2024-Q4 |
+| year         | 180d        | vmsnap-backup-yearly-2024       | 
+
 #### Pruning (Caution)
 
 **Note:** Pruning is destructive.  Be careful when using it and check your 
 backups frequently!
 
-Pruning backups may be done by setting `--prune="true"` on the backup command.
-This flag will automatically delete last months backup once the 15th of the
-current backup month comes up.
+Pruning backups may be done by setting `--prune` on the backup command.
+This flag will automatically delete last periods backup once the middle of the
+current backup period comes up.
 
-Turning on pruning means you will have a sliding window of backups between 2-6
-weeks of time, depending on where you are in the backup cycle.
+>**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
+> to be "month."
+
+Pruning provides a sliding window for the given period or +/-50% depending upon
+where you are in the backup cycle.  For example, setting the `groupBy` flag to
+"month" would mean you would have 2-6 weeks of backups on hand at any given 
+time.
 
 #### Raw Disk Handling
 
