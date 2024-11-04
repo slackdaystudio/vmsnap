@@ -63,7 +63,7 @@ const checkCommand = ({ status, scrub, backup }) => {
   if (commandCount > 1) {
     throw new Error(
       'Only one command can be run at a time',
-      ERR_TO_MANY_COMMANDS,
+      ERR_TOO_MANY_COMMANDS,
     );
   }
 };

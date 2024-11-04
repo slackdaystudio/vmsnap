@@ -57,7 +57,7 @@ export const ERR_SCRUB = 5;
 export const ERR_LOCK_RELEASE = 6;
 
 // More than one command was specified.
-export const ERR_TO_MANY_COMMANDS = 7;
+export const ERR_TOO_MANY_COMMANDS = 7;
 
 // A spinnner for long running tasks
 export const spinner = yoctoSpinner();
