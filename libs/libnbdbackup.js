@@ -32,11 +32,11 @@ const FREQUENCY_QUARTERLY = 'quarter';
 
 const FREQUENCY_YEARLY = 'year';
 
-const PRUNING_FREQUENCIES = new Map([
-  [FREQUENCY_MONTHLY, 'Monthly'],
-  [FREQUENCY_QUARTERLY, 'Quarterly'],
-  [FREQUENCY_YEARLY, 'Yearly'],
-]);
+const PRUNING_FREQUENCIES = [
+  FREQUENCY_MONTHLY, 
+  FREQUENCY_QUARTERLY,
+  FREQUENCY_YEARLY,
+];
 
 /**
  * Returns the current months backup folder name in the format for the given
@@ -59,7 +59,7 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY) => {
       backupFolder = dayjs().format(FORMAT_MONTHLY);
   }
 
-  return (backupFolder = `vmsnap-backup-${groupBy}ly-${backupFolder}`);
+  return `vmsnap-backup-${groupBy}ly-${backupFolder}`;
 };
 
 /**
@@ -154,11 +154,9 @@ const isPruningRequired = async (
     return false; // No pruning required
   }
 
-  const frequency = [...PRUNING_FREQUENCIES.values()].find((v) => v === groupBy);
-
   // If the window is not found, assume no pruning is required.
-  if (frequency === undefined) {
-    logger.warn(`Invalid prune frequency: ${groupBy}`);
+  if (!PRUNING_FREQUENCIES.includes(groupBy)) {
+    logger.warn(`Invalid prune frequency: ${groupBy}.  Pruning disabled`);
 
     return false;
   }

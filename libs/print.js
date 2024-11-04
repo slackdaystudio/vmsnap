@@ -22,10 +22,10 @@ export const TYPE_JSON = 'JSON';
  */
 const printStatusCheck = async ({
   domains = '*',
-  verbose,
+  verbose = false,
   output,
-  pretty,
-  machine,
+  pretty = false,
+  machine = false,
   groupBy = FREQUENCY_MONTHLY,
   yml = false,
   yaml = false,
@@ -42,7 +42,11 @@ const printStatusCheck = async ({
   spinner.stop();
 
   if (yml || yaml || json) {
-    printSerializedStatus(statuses, yml, yaml, machine);
+    printSerializedStatus(
+      statuses,
+      yml || yaml ? TYPE_YAML : TYPE_JSON,
+      machine,
+    );
   } else {
     printStatuses(statuses);
   }
@@ -125,15 +129,15 @@ const frame = (prefix, text) => {
  * Serializes the statuses and prints them to the console.
  *
  * @param {Array} statuses an array of statuses to print
+ * @param {string} type the type of serialization to use (YAML or JSON)
+ * @param {boolean} machine whether to print the output in machine readable
+ * format or not
  */
-const printSerializedStatus = (statuses, yml, yaml, machine) => {
+const printSerializedStatus = (statuses, type = TYPE_JSON, machine = true) => {
   let serialized;
-  let type = TYPE_JSON;
 
-  if (yml || yaml) {
+  if (type === TYPE_YAML) {
     serialized = YAML.stringify(statuses);
-
-    type = TYPE_YAML;
   } else {
     serialized = JSON.stringify(statuses, undefined, machine ? 0 : 2);
   }

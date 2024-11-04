@@ -43,7 +43,8 @@ const checkDependencies = async () => {
 /**
  * Checks the command line arguments to ensure only one command is being run.
  *
- * @param {object} argv the arguments passed to the script
+ * @param {object} options the command line options to destructure for status,
+ * scrub, and backup.
  */
 const checkCommand = ({ status, scrub, backup }) => {
   let commandCount = 0;
@@ -114,6 +115,7 @@ const fileExists = async (path) => {
 /**
  * Scrubs off the checkpoints and bitmaps for the domains passed in.
  *
+ * @param {string} domains the domains to scrub checkpoints and bitmaps for
  * @returns {Promise<boolean>} true if the scrubbing was successful, false if
  * there was a failure.
  */
@@ -148,7 +150,7 @@ const scrubCheckpointsAndBitmaps = async (domains) => {
 /**
  * Returns the key corresponding to a given value in a map.
  *
- * @param {Map<any, string>} map - A map to search for the key by value.
+ * @param {Map<any, any>} map - A map to search for the key by value.
  * @param {any} value - The value to search for in the map.
  * @returns {any} The key of the map corresponding to the value, or undefined
  * if not found.

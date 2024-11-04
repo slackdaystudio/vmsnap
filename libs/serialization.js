@@ -19,6 +19,7 @@ export const STATUSES = new Map([
   [STATUS_INCONSISTENT, 'INCONSISTENT'],
 ]);
 
+// The maximum number of times to recurse into a directory
 const FOLDER_RECURSION_LIMIT = 5;
 
 /**
@@ -26,8 +27,11 @@ const FOLDER_RECURSION_LIMIT = 5;
  *
  * @param {string} rawDomains - A domain or list of domains to get the status
  * of.
- * @param {string} [path] - The path to the backup directory root.
- * @returns {Promise<object>} A JSON object representing the status of the
+ * @param {string|undefined} path the path to the backup directory root.
+ * @param {string} groupBy the frequency to group backups by on disk (month, 
+ * quarter, or year).
+ * @param {boolean} pretty whether to pretty print the size of disks or not.
+ * @returns {Promise<object>} a JSON object representing the status of the
  * domains.
  */
 const getStatus = async (
@@ -102,6 +106,7 @@ const getStatus = async (
  * MB
  *
  * @param {number} size the bytes to print
+ * @param {boolean} pretty whether to pretty print the size or not
  * @returns {number|string} the size in bytes or a pretty formatted string
  */
 const getDiskSize = (size, pretty = false) =>
@@ -191,7 +196,7 @@ const getOverallStatus = (json) => {
  *
  * @param {*} stats the stats object to add stats to
  * @param {*} path the path to the directory to collect stats for
- * @execCount {number} the number of times the function been called recursively
+ * @param {*} recursionCount the number of times the function has been called
  */
 const collectDirStats = async (stats, path, recursionCount = 0) => {
   if (recursionCount === FOLDER_RECURSION_LIMIT) {

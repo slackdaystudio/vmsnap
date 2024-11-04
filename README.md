@@ -129,8 +129,9 @@ Status for dom1:
           virtnbdbackup.2
 ```
 
->**Tip:** Pass in an `output=/PATH/TO/BACKUPS` flag to see statistics about the
-> backups already saved to disk.
+>**Tip:** Pass in an `output=/PATH/TO/BACKUP_ROOT` flag to see statistics about 
+> the backups already saved to disk.  VMSnap will perform additional integrity
+> checks using the information it collects.
 
 Machine parsable output is possible with the `--json` and `--yaml` flags in
 combination with the `--machine` flag.
@@ -157,7 +158,7 @@ vmsnap --domains="dom1" --machine --json
 
 ### Backup
 
-Backups are always incremental unless VMSnap is cutting a new months first 
+Backups are always incremental unless VMSnap is cutting a new periods first 
 backup.  Subsequent backups will be incremental meaning only the changes from
 the VM will be captured.
 
@@ -176,11 +177,14 @@ directory.
 You may also specify the `--groupBy` flag to tell VMSnap how to group your files
 on disk. Look at the table below for more information.
 
-| groupBy Flag | Middle Mark | Sample name                     |
+| groupBy Flag | Middle Mark | Sample Folder Name              |
 |--------------|-------------|---------------------------------|
 | month        | 15d         | vmsnap-backup-monthly-2024-11   |
 | quarter      | 45d         | vmsnap-backup-quarterly-2024-Q4 |
 | year         | 180d        | vmsnap-backup-yearly-2024       | 
+
+>**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
+> to be "month."
 
 #### Pruning (Caution)
 
@@ -191,10 +195,7 @@ Pruning backups may be done by setting `--prune` on the backup command.
 This flag will automatically delete last periods backup once the middle of the
 current backup period comes up.
 
->**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
-> to be "month."
-
-Pruning provides a sliding window for the given period or +/-50% depending upon
+Pruning provides a sliding window for the given period of +/-50% depending upon
 where you are in the backup cycle.  For example, setting the `groupBy` flag to
 "month" would mean you would have 2-6 weeks of backups on hand at any given 
 time.

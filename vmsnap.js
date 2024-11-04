@@ -156,7 +156,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
       if (err) {
         logger.error(err);
 
-        exit(ERR_LOCK_RELEASE);
+        exitCode = ERR_LOCK_RELEASE;
       }
 
       exit(exitCode || ERR_MAIN);
