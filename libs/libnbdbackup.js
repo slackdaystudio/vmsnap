@@ -281,7 +281,6 @@ const backup = async (
   }
 
   const child = spawn(BACKUP, commandOpts, {
-    cwd: import.meta.dirname,
     uid: 0,
     gid: 0,
     stdio: 'inherit',

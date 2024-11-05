@@ -9,6 +9,7 @@
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
     "format": "npx prettier --write \"*.js\"",
+    "build": "rm -rf dist && mkdir dist && cp package*.json dist/ && esbuild --minify --platform=node --outdir=dist vmsnap.js libs/*.js",
     "prepare": "husky install || true"
   },
   "author": "Philip J. Guinchard",
@@ -37,6 +38,7 @@
     "@babel/eslint-parser": "^7.25.1",
     "@babel/preset-react": "^7.24.7",
     "@types/yargs": "^17.0.33",
+    "esbuild": "^0.24.0",
     "eslint": "^9.9.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
@@ -49,7 +51,17 @@
   },
   "exports": "./vmsnap.js",
   "bin": {
-    "vmsnap": "./vmsnap.js"
+    "vmsnap": "./dist/vmsnap.js"
   },
-  "type": "module"
+  "type": "module",
+  "keywords": [
+    "kvm",
+    "backup",
+    "snapshot",
+    "rotation",
+    "qemu",
+    "virsh",
+    "virtualization",
+    "vm"
+  ]
 }
