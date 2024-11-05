@@ -57,8 +57,8 @@ const findBitmaps = async (domain) => {
  * Scrubs a domain of any bitmaps that may be left behind from the previous
  * month's backups.
  *
- * @param {string} domain the domain to cleanup bitmaps for
- * bitmaps for besides any virtual disks found.
+ * @param {string} domain the domain to cleanup bitmaps for bitmaps for besides 
+ * any virtual disks found.
  */
 const cleanupBitmaps = async (domain) => {
   const bitmaps = await findBitmaps(domain);
@@ -71,6 +71,12 @@ const cleanupBitmaps = async (domain) => {
     }
 
     for (const bitmap of record.bitmaps) {
+      // Adding just in case we have a bitmap that isn't ours.  Not sure if 
+      // this is possible, but better safe than sorry.
+      if (/^virtnbdbackup\.[0-9]*$/.test(b.name) === false) {
+        continue;
+      }
+
       const command = [
         QEMU_IMG,
         'bitmap',

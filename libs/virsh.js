@@ -28,9 +28,9 @@ const domainExists = async (domain) => {
   const command = [VIRSH, 'domstate', domain];
 
   try {
-    const { stderr } = await asyncExec(command.join(' '));
+    await asyncExec(command.join(' '));
 
-    return Object.hasOwn(stderr, 'code') ? stderr.code === 0 : true;
+    return true;
   } catch (error) {
     return false;
   }
@@ -84,6 +84,12 @@ const cleanupCheckpoints = async (domain) => {
   }
 
   for (const checkpoint of checkpoints) {
+    // Adding just in case we have a checkpoint that isn't ours.  Not sure if 
+    // this is possible, but better safe than sorry.
+    if (/^virtnbdbackup\.[0-9]*$/.test(checkpoint) === false) {
+      continue;
+    }
+
     const command = [
       VIRSH,
       'checkpoint-delete',
