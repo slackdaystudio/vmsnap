@@ -73,7 +73,7 @@ const cleanupBitmaps = async (domain) => {
     for (const bitmap of record.bitmaps) {
       // Adding just in case we have a bitmap that isn't ours.  Not sure if 
       // this is possible, but better safe than sorry.
-      if (/^virtnbdbackup\.[0-9]*$/.test(b.name) === false) {
+      if (/^virtnbdbackup\.[0-9]*$/.test(bitmap.name) === false) {
         continue;
       }
 
