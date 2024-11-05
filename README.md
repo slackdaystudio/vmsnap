@@ -145,15 +145,7 @@ vmsnap --domains="dom1" --machine --json
 ..will produce something like the following.
 
 ```json
-{
-  "dom1": {
-    "checkpoints": ["virtnbdbackup.0", "virtnbdbackup.1"],
-    "disks": [
-      { "disk": "vda", "bitmaps": ["virtnbdbackup.0", "virtnbdbackup.1"] }
-    ],
-    "overallStatus": 0
-  }
-}
+{"dom1":{"checkpoints":["virtnbdbackup.0","virtnbdbackup.1"],"disks":[{"disk":"vda","bitmaps":["virtnbdbackup.0","virtnbdbackup.1"]}],"overallStatus":0}}
 ```
 
 ### Backup

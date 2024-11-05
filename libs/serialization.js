@@ -194,9 +194,9 @@ const getOverallStatus = (json) => {
  *
  * Recursion.
  *
- * @param {*} stats the stats object to add stats to
- * @param {*} path the path to the directory to collect stats for
- * @param {*} recursionCount the number of times the function has been called
+ * @param {object} stats the stats object to add stats to
+ * @param {string} path the path to the directory to collect stats for
+ * @param {number} recursionCount the number of times the function has been called
  */
 const collectDirStats = async (stats, path, recursionCount = 0) => {
   if (recursionCount === FOLDER_RECURSION_LIMIT) {
