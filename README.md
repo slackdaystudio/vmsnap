@@ -90,12 +90,12 @@ The following CLI switches are available when invoking VMSnap.
 | groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, bi-annual or year)  | 
 | prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*                         |
 | pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                              |
-| checkpointName | -      | -      | ✅     | boolean | The name of the checkpoint to delete (no effect when scrubType=*)            |
-| scrubType      | -      | -      | ✅     | boolean | The type of item to scrub (checkpoint, bitmap, both, or * for ALL)           |
+| checkpointName | -      | -      | ✅     | string  | The name of the checkpoint to delete (no effect when scrubType=*)            |
+| scrubType      | -      | -      | ✅     | string  | The type of item to scrub (checkpoint, bitmap, both, or * for ALL)           |
 
-*\*This happens on or after the the middle of the current period (15 days monthly, 45 days quarterly or 180 yearly)*
+*\*This happens on or after the the middle of the current period (15 days monthly, 45 days quarterly, 90 days bi-annually or 180 yearly)*
 
-### Status
+## Status
 
 The default action for VMSnap is to display a status report for VMs supplied.
 
@@ -150,13 +150,13 @@ vmsnap --domains=vm1 --machine --json
 {"vm1":{"checkpoints":["virtnbdbackup.0","virtnbdbackup.1","virtnbdbackup.2"],"disks":[{"disk":"vda","virtualSize":107374182400,"actualSize":14293934080,"bitmaps":["virtnbdbackup.0","virtnbdbackup.1","virtnbdbackup.2"]}],"overallStatus":0}}
 ```
 
-### Backup
+## Backup
 
 Backups are always incremental unless VMSnap is cutting a new periods first 
 backup.  Subsequent backups will be incremental meaning only the changes from
 the VM will be captured.
 
-Create a snapshot for `dom1` and output it to the `tmp` direcory:
+Create a snapshot for `vm1` and output it to the `tmp` direcory:
 
 ```sh
 vmsnap --domains=vm1 --output=/tmp --backup
@@ -171,17 +171,17 @@ directory.
 You may also specify the `--groupBy` flag to tell VMSnap how to group your files
 on disk. Look at the table below for more information.
 
-| groupBy Flag | Middle Mark | Sample Folder Name              |
-|--------------|-------------|---------------------------------|
-| month        | 15d         | vmsnap-backup-monthly-2024-11   |
-| quarter      | 45d         | vmsnap-backup-quarterly-2024-Q4 |
-| bi-annual    | 90d         | vmsnap-backup-quarterly-2024-p2 |
-| year         | 180d        | vmsnap-backup-yearly-2024       | 
+| groupBy Flag | Middle Mark | Sample Folder Name                |
+|--------------|-------------|-----------------------------------|
+| month        | 15d         | vmsnap-backup-monthly-2024-11     |
+| quarter      | 45d         | vmsnap-backup-quarterly-2024-Q4   |
+| bi-annual    | 90d         | vmsnap-backup-bi-annually-2024-p2 |
+| year         | 180d        | vmsnap-backup-yearly-2024         | 
 
 >**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
 > to be "month."
 
-#### Pruning (Caution)
+### Backup Pruning (Caution)
 
 > **Note:** Pruning is destructive.  Be careful when using it and check your 
  backups frequently!
@@ -195,11 +195,11 @@ where you are in the backup cycle.  For example, setting the `groupBy` flag to
 "month" would mean you would have 2-6 weeks of backups on hand at any given 
 time.
 
-#### Raw Disk Handling
+### Raw Disk Handling
 
 You can turn on raw disk handling by setting the `--raw` flag.
 
-### Scrubbing
+## Scrubbing
 
 > **Note:** These commands are inherently destructive, be careful!
 
@@ -221,7 +221,7 @@ To scrub a domain of **ALL** checkpoints and bitmaps
 vmsnap --domains=vm1 --scrub --scrubType=*
 ```
 
-## Contributing
+# Contributing
 
 We welcome contributions! Please follow these steps to contribute:
 
