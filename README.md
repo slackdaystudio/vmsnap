@@ -33,7 +33,7 @@ vmsnap --domains=vm1 --status
 > may also omit the domains flag altogther to allow VMSnap to query for all VMs.
 
 
-The app will let you know if you are missing any directories
+The app will let you know if you are missing any required programs.
 
 ## Installation
 
