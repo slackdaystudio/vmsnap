@@ -1,6 +1,6 @@
 {
   "name": "vmsnap",
-  "version": "1.2.0-alpha",
+  "version": "1.2.1-alpha",
   "description": "A Node based backup and backup rotation tool for KVM domains.",
   "main": "dist/vmsnap.js",
   "scripts": {
