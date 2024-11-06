@@ -4,6 +4,7 @@ import { rm } from 'fs/promises';
 import dayjs from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
+import dayOfYear from 'dayjs/plugin/dayOfYear.js';
 import { logger } from '../vmsnap.js';
 import { cleanupCheckpoints, domainExists, fetchAllDomains } from './virsh.js';
 import { fileExists, parseArrayParam } from './general.js';
@@ -19,6 +20,7 @@ import { cleanupBitmaps } from './qemu-img.js';
 // resolution for the backup directories.
 dayjs.extend(advancedFormat);
 dayjs.extend(quarterOfYear);
+dayjs.extend(dayOfYear)
 
 export const BACKUP = 'virtnbdbackup';
 
@@ -26,17 +28,22 @@ const FORMAT_MONTHLY = 'YYYY-MM';
 
 const FORMAT_QUARTERLY = 'YYYY-[Q]Q';
 
+const FORMAT_BI_ANNUALLY = 'YYYY-';
+
 const FORMAT_YEARLY = 'YYYY';
 
 export const FREQUENCY_MONTHLY = 'month';
 
 const FREQUENCY_QUARTERLY = 'quarter';
 
+const FREQUENCY_BI_ANNUALLY = 'bi-annual';
+
 const FREQUENCY_YEARLY = 'year';
 
 const PRUNING_FREQUENCIES = [
   FREQUENCY_MONTHLY,
   FREQUENCY_QUARTERLY,
+  FREQUENCY_BI_ANNUALLY,
   FREQUENCY_YEARLY,
 ];
 
@@ -54,6 +61,19 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
       lastFolder = current
         ? dayjs().format(FORMAT_QUARTERLY)
         : dayjs().subtract(3, 'months').format(FORMAT_QUARTERLY);
+      break;
+    case FREQUENCY_BI_ANNUALLY:
+      let yearPart = dayjs().dayOfYear() >= 180 ? '2' : '1';
+
+      if (!current) {
+        yearPart = dayjs().subtract(6, 'months').dayOfYear() >= 180 ? '2' : '1';
+      }
+
+      const format = `${FORMAT_BI_ANNUALLY}p${yearPart}`;
+
+      lastFolder = current
+        ? dayjs().format(format)
+        : dayjs().subtract(6, 'months').format(format);
       break;
     case FREQUENCY_YEARLY:
       lastFolder = current
@@ -185,6 +205,8 @@ const isPruningRequired = async (domain, groupBy, pruneFrequency, path) => {
       return days >= 15;
     case FREQUENCY_QUARTERLY:
       return days >= 45;
+    case FREQUENCY_BI_ANNUALLY:
+      return days >= 90;
     case FREQUENCY_YEARLY:
       return days >= 180;
     default:
@@ -229,15 +251,15 @@ const pruneLastMonthsBackups = async (domain, groupBy, path) => {
  * @returns {dayjs} the start date for the backup
  */
 const getBackupStartDate = (groupBy) => {
-  switch (groupBy.toLowerCase()) {
-    case FREQUENCY_QUARTERLY:
-      return dayjs().startOf('quarter');
-    case FREQUENCY_YEARLY:
-      return dayjs().startOf('year');
-    case FREQUENCY_MONTHLY:
-    default:
-      return dayjs().startOf('month');
+  if (groupBy === FREQUENCY_BI_ANNUALLY) {
+    return dayjs().startOf(FREQUENCY_MONTHLY).subtract(6, 'months');
   }
+  
+  if (PRUNING_FREQUENCIES.includes(groupBy)) {
+    return dayjs().startOf(groupBy);
+  }
+
+  return dayjs().startOf(FREQUENCY_MONTHLY);
 };
 
 /**

@@ -24,16 +24,16 @@ You must have the following on your host OS:
 Getting these installed is out of scope for this doc.
 
 Run the following command if you are not sure if you have them on your host OS.
+ 
  ```sh
-which virsh && which qemu-img && which virtnbdbackup
+vmsnap --domains=vm1 --status
  ```
-You should see something like the following, assuming you have everything 
-installed on your host.
-```
-/usr/bin/virsh
-/usr/bin/qemu-img
-/usr/bin/virtnbdbackup
-```
+
+> **Tip:** Make sure you substitute "vm1" with the name of one of your VMs.  You
+> may also omit the domains flag altogther to allow VMSnap to query for all VMs.
+
+
+The app will let you know if you are missing any directories
 
 ## Installation
 
@@ -75,23 +75,23 @@ command. Doing so will install VMSnap which includes a vmsnap bin.
 
 The following CLI switches are available when invoking VMSnap.
 
-| Switch         | Status | Backup | Scrub  |  Type   |                     Examples/Notes                                 |
-|----------------|--------|--------|--------|---------|--------------------------------------------------------------------|
-| domains        | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                                      |
-| status         | ✅     | -      | -      | boolean | Querys the domain(s)                                               |
-| backup         | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                           |
-| scrub          | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain                   |
-| output         | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed                |
-| verbose        | ✅     | -      | -      | boolean | Prints out extra information when running a status check           |
-| machine        | ✅     | -      | -      | boolean | Removes some output from the status command                        |
-| json           | ✅     | -      | -      | boolean | Outputs the status command is JSON                                 |
-| yaml           | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`)           |
-| raw            | -      | ✅     | -      | boolean | Enables raw disk handling                                          |
-| groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, or year)  | 
-| prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*               |
-| pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                    |
-| checkpointName | -      | -      | ✅     | boolean | The name of the checkpoint to delete (no effect when scrubType=*)  |
-| scrubType      | -      | -      | ✅     | boolean | The type of item to scrub (checkpoint, bitmap, both, or * for ALL) |
+| Switch         | Status | Backup | Scrub  |  Type   |                     Examples/Notes                                           |
+|----------------|--------|--------|--------|---------|------------------------------------------------------------------------------|
+| domains        | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                                                |
+| status         | ✅     | -      | -      | boolean | Querys the domain(s)                                                         |
+| backup         | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                                     |
+| scrub          | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain                             |
+| output         | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed                          |
+| verbose        | ✅     | -      | -      | boolean | Prints out extra information when running a status check                     |
+| machine        | ✅     | -      | -      | boolean | Removes some output from the status command                                  |
+| json           | ✅     | -      | -      | boolean | Outputs the status command is JSON                                           |
+| yaml           | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`)                     |
+| raw            | -      | ✅     | -      | boolean | Enables raw disk handling                                                    |
+| groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, bi-annual or year)  | 
+| prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*                         |
+| pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                              |
+| checkpointName | -      | -      | ✅     | boolean | The name of the checkpoint to delete (no effect when scrubType=*)            |
+| scrubType      | -      | -      | ✅     | boolean | The type of item to scrub (checkpoint, bitmap, both, or * for ALL)           |
 
 *\*This happens on or after the the middle of the current period (15 days monthly, 45 days quarterly or 180 yearly)*
 
@@ -100,7 +100,7 @@ The following CLI switches are available when invoking VMSnap.
 The default action for VMSnap is to display a status report for VMs supplied.
 
 ```sh
-vmsnap --domains="dom1" --status
+vmsnap --domains=vm1 --status
 ```
 
 > **Tip:** The `--domains` flag also accepts a comma seperated list of domains. 
@@ -115,13 +115,13 @@ vmsnap --domains="dom1" --status
 This could return the following information if ran, as an example.
 
 ```
-Status for dom1:
+Status for vm1:
   Overall status: OK
-  Checkpoints found for dom1:
+  Checkpoints found for vm1:
     virtnbdbackup.0
     virtnbdbackup.1
     virtnbdbackup.2
-  Eligible disks found for dom1:
+  Eligible disks found for vm1:
     vda
       Virtual size: 107374182400
       Actual size: 14286573568
@@ -141,13 +141,13 @@ combination with the `--machine` flag.
 For example, running the following command...
 
 ```sh
-vmsnap --domains="dom1" --machine --json
+vmsnap --domains=vm1 --machine --json
 ```
 
 ..will produce something like the following.
 
 ```json
-{"dom1":{"checkpoints":["virtnbdbackup.0","virtnbdbackup.1"],"disks":[{"disk":"vda","bitmaps":["virtnbdbackup.0","virtnbdbackup.1"]}],"overallStatus":0}}
+{"vm1":{"checkpoints":["virtnbdbackup.0","virtnbdbackup.1","virtnbdbackup.2"],"disks":[{"disk":"vda","virtualSize":107374182400,"actualSize":14293934080,"bitmaps":["virtnbdbackup.0","virtnbdbackup.1","virtnbdbackup.2"]}],"overallStatus":0}}
 ```
 
 ### Backup
@@ -159,7 +159,7 @@ the VM will be captured.
 Create a snapshot for `dom1` and output it to the `tmp` direcory:
 
 ```sh
-vmsnap --domains="dom1" --output="/tmp" --backup
+vmsnap --domains=vm1 --output=/tmp --backup
 ```
 
 The above command will create a the backup for the domain. This creates a
@@ -175,6 +175,7 @@ on disk. Look at the table below for more information.
 |--------------|-------------|---------------------------------|
 | month        | 15d         | vmsnap-backup-monthly-2024-11   |
 | quarter      | 45d         | vmsnap-backup-quarterly-2024-Q4 |
+| bi-annual    | 90d         | vmsnap-backup-quarterly-2024-p2 |
 | year         | 180d        | vmsnap-backup-yearly-2024       | 
 
 >**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
@@ -209,14 +210,15 @@ be cautious.
 Use this command to scrub a single bitmap from your backup disks.  Keep in mind 
 that bitmaps are stored on a per disk basis.  VMSnap will scrub each disk of the 
 bitmap if it find it.
+
 ```sh
-vmsnap --domains="dom1" --scrub --scrubType=bitmap --checkpointName=virtnbdbackup.17
+vmsnap --domains=vm1 --scrub --scrubType=bitmap --checkpointName=virtnbdbackup.17
 ```
 
 To scrub a domain of **ALL** checkpoints and bitmaps
 
 ```sh
-vmsnap --domains="dom1" --scrub --scrubType=*
+vmsnap --domains=vm1 --scrub --scrubType=*
 ```
 
 ## Contributing
