@@ -84,6 +84,7 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
       lastFolder = current
         ? dayjs().format(FORMAT_MONTHLY)
         : dayjs().subtract(1, 'month').format(FORMAT_MONTHLY);
+      break;
     default:
       return undefined;
   }
