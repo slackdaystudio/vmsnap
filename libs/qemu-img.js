@@ -1,7 +1,7 @@
 import { sep } from 'path';
 import { asyncExec, logger } from '../vmsnap.js';
 import { findKeyByValue } from './general.js';
-import { fetchAllDisks } from './virsh.js';
+import { CHECKPOINT_REGEX, fetchAllDisks } from './virsh.js';
 
 /**
  * The qemu-img command interface.
@@ -60,7 +60,7 @@ const findBitmaps = async (domain) => {
  * @param {string} domain the domain to cleanup bitmaps for bitmaps for besides 
  * any virtual disks found.
  */
-const cleanupBitmaps = async (domain) => {
+const cleanupBitmaps = async (domain, checkpointName = undefined) => {
   const bitmaps = await findBitmaps(domain);
 
   for (const record of bitmaps) {
@@ -73,7 +73,12 @@ const cleanupBitmaps = async (domain) => {
     for (const bitmap of record.bitmaps) {
       // Adding just in case we have a bitmap that isn't ours.  Not sure if 
       // this is possible, but better safe than sorry.
-      if (/^virtnbdbackup\.[0-9]*$/.test(bitmap.name) === false) {
+      if (CHECKPOINT_REGEX.test(bitmap.name) === false) {
+        continue;
+      }
+
+      // If we have a checkpoint name and it doesn't match, skip it
+      if (checkpointName && bitmap.name !== checkpointName) {
         continue;
       }
 
@@ -86,14 +91,10 @@ const cleanupBitmaps = async (domain) => {
       ];
 
       logger.info(
-        `- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`,
+        `Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`,
       );
 
       try {
-        logger.info(
-          `- Removing bitmap ${bitmap.name} from ${record.path} on ${domain}`,
-        );
-
         await asyncExec(command.join(' '));
       } catch (error) {
         logger.warn(

@@ -59,6 +59,9 @@ export const ERR_LOCK_RELEASE = 6;
 // More than one command was specified.
 export const ERR_TOO_MANY_COMMANDS = 7;
 
+// Invalid scrub type was specified.
+export const ERR_INVALID_SCRUB_TYPE = 8;
+
 // A spinnner for long running tasks
 export const spinner = yoctoSpinner();
 
@@ -133,7 +136,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
     checkCommand(argv);
 
     if (argv.scrub) {
-      await scrubCheckpointsAndBitmaps(argv.domains);
+      await scrubCheckpointsAndBitmaps(argv);
     } else if (argv.backup) {
       await performBackup(argv);
     } else {

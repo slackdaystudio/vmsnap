@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { rm } from 'fs/promises';
 import dayjs from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat.js';
+import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 import { logger } from '../vmsnap.js';
 import { cleanupCheckpoints, domainExists, fetchAllDomains } from './virsh.js';
 import { fileExists, parseArrayParam } from './general.js';
@@ -17,6 +18,7 @@ import { cleanupBitmaps } from './qemu-img.js';
 // The dayjs library with the advanced format plugin.  We need quarter
 // resolution for the backup directories.
 dayjs.extend(advancedFormat);
+dayjs.extend(quarterOfYear);
 
 export const BACKUP = 'virtnbdbackup';
 
@@ -33,7 +35,7 @@ const FREQUENCY_QUARTERLY = 'quarter';
 const FREQUENCY_YEARLY = 'year';
 
 const PRUNING_FREQUENCIES = [
-  FREQUENCY_MONTHLY, 
+  FREQUENCY_MONTHLY,
   FREQUENCY_QUARTERLY,
   FREQUENCY_YEARLY,
 ];
@@ -44,22 +46,29 @@ const PRUNING_FREQUENCIES = [
  *
  * @returns {string} the current months backup folder name
  */
-const getBackupFolder = (groupBy = FREQUENCY_MONTHLY) => {
-  let backupFolder;
+const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
+  let lastFolder;
 
   switch (groupBy) {
     case FREQUENCY_QUARTERLY:
-      backupFolder = dayjs().format(FORMAT_QUARTERLY);
+      lastFolder = current
+        ? dayjs().format(FORMAT_QUARTERLY)
+        : dayjs().subtract(3, 'months').format(FORMAT_QUARTERLY);
       break;
     case FREQUENCY_YEARLY:
-      backupFolder = dayjs().format(FORMAT_YEARLY);
+      lastFolder = current
+        ? dayjs().format(FORMAT_YEARLY)
+        : dayjs().subtract(1, 'year').format(FORMAT_YEARLY);
       break;
     case FREQUENCY_MONTHLY:
+      lastFolder = current
+        ? dayjs().format(FORMAT_MONTHLY)
+        : dayjs().subtract(1, 'month').format(FORMAT_MONTHLY);
     default:
-      backupFolder = dayjs().format(FORMAT_MONTHLY);
+      return undefined;
   }
 
-  return `vmsnap-backup-${groupBy}ly-${backupFolder}`;
+  return `vmsnap-backup-${groupBy}ly-${lastFolder}`;
 };
 
 /**
@@ -68,13 +77,7 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY) => {
  *
  * @param {Object} args the command line arguments (domans, output, raw, prune)
  */
-const performBackup = async ({
-  domains,
-  output,
-  raw,
-  groupBy,
-  prune,
-}) => {
+const performBackup = async ({ domains, output, raw, groupBy, prune }) => {
   if (!domains) {
     throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
@@ -84,7 +87,7 @@ const performBackup = async ({
   }
 
   for (const domain of await parseArrayParam(domains, fetchAllDomains)) {
-    if (await isCleanupRequired(domain, groupBy, prune, output)) {
+    if (await isCleanupRequired(domain, groupBy, output)) {
       logger.info('Creating a new backup directory, running bitmap cleanup');
 
       await cleanupCheckpoints(domain);
@@ -116,22 +119,21 @@ const performBackup = async ({
  * @param {*} path the full backup directory path
  * @returns {Promise<boolean>} true if cleanup is required, false otherwise
  */
-const isCleanupRequired = async (domain, groupBy, pruneFrequency, path) => {
-  // We're not pruning, so no cleanup is required.
-  if (pruneFrequency === undefined || pruneFrequency === false) {
-    return false;
-  }
-
-  const currentBackupFolderExists = await fileExists(
+const isCleanupRequired = async (domain, groupBy, path) => {
+  const backupFolderExists = await fileExists(
     `${path}${sep}${domain}${sep}${getBackupFolder(groupBy)}`,
   );
 
   // Cleanup is required if the backup folder does not exist.  We do this to
   // ensure we don't overwrite the previous months backups and to establish a
   // full backup for the start of the new period.
-  //
-  // If the backup folder exists, we assume the cleanup has already been done.
-  return currentBackupFolderExists === false;
+  if (!backupFolderExists) {
+    logger.info('Backup folder does not exist, cleanup required');
+
+    return true;
+  }
+
+  return false;
 };
 
 /**
@@ -144,25 +146,28 @@ const isCleanupRequired = async (domain, groupBy, pruneFrequency, path) => {
  * @param {string} path the full backup directory path
  * @returns true if pruning is required, false otherwise
  */
-const isPruningRequired = async (
-  domain,
-  groupBy,
-  pruneFrequency,
-  path,
-) => {
-  if (pruneFrequency === undefined || pruneFrequency === false) {
+const isPruningRequired = async (domain, groupBy, pruneFrequency, path) => {
+  if (pruneFrequency === false) {
     return false; // No pruning required
   }
 
   // If the window is not found, assume no pruning is required.
   if (!PRUNING_FREQUENCIES.includes(groupBy)) {
-    logger.warn(`Invalid prune frequency: ${groupBy}.  Pruning disabled`);
+    logger.warn(`Invalid groupBy: ${groupBy}.  Pruning disabled`);
+
+    return false;
+  }
+
+  const previousBackupFolder = getBackupFolder(groupBy, false);
+
+  if (previousBackupFolder === undefined) {
+    logger.info('Unable to determine previous backup folder, skipping pruning');
 
     return false;
   }
 
   const previousBackupFolderExists = await fileExists(
-    `${path}${sep}${domain}${sep}${getPreviousBackupFolder(groupBy)}`,
+    `${path}${sep}${domain}${sep}${previousBackupFolder}`,
   );
 
   if (!previousBackupFolderExists) {
@@ -171,9 +176,11 @@ const isPruningRequired = async (
 
   // The number of days between the current date and the start of the backup
   // period.
-  const days = getBackupStartDate(groupBy).diff(dayjs().date(), 'days');
+  const days = dayjs().diff(getBackupStartDate(groupBy), 'days');
 
-  switch (groupBy) {
+  logger.info(`Days since the start of the ${groupBy}: ${days}`);
+
+  switch (groupBy.toLowerCase()) {
     case FREQUENCY_MONTHLY:
       return days >= 15;
     case FREQUENCY_QUARTERLY:
@@ -196,10 +203,16 @@ const isPruningRequired = async (
  * @param {string} path the full backup directory path
  */
 const pruneLastMonthsBackups = async (domain, groupBy, path) => {
-  const previousBackupFolder = getPreviousBackupFolder(groupBy);
+  const previousBackupFolder = getBackupFolder(groupBy, false);
 
-  console.info(
-    `Pruning ${window} backup (${previousBackupFolder}) for ${domain}`,
+  if (previousBackupFolder === undefined) {
+    logger.info('Unable to determine previous backup folder, skipping pruning');
+
+    return;
+  }
+
+  logger.info(
+    `Pruning ${groupBy}ly backup (${previousBackupFolder}) for ${domain}`,
   );
 
   await rm(`${path}${sep}${domain}${sep}${previousBackupFolder}`, {
@@ -209,42 +222,21 @@ const pruneLastMonthsBackups = async (domain, groupBy, path) => {
 };
 
 /**
+ * Finds and returns the start date for the backup period.
  *
- * @param {string} groupBy the frequency to prune the backups (monthly,
- * quarterly, yearly)
+ * @param {string} groupBy the frequency to prune the backups (month, quarter,
+ * year)
  * @returns {dayjs} the start date for the backup
  */
 const getBackupStartDate = (groupBy) => {
-  switch (groupBy.toLowerCase) {
-    case FREQUENCY_MONTHLY:
-      return dayjs().startOf('month');
+  switch (groupBy.toLowerCase()) {
     case FREQUENCY_QUARTERLY:
       return dayjs().startOf('quarter');
     case FREQUENCY_YEARLY:
       return dayjs().startOf('year');
-    default:
-      throw new Error(`Invalid prune groupBy: ${groupBy}`);
-  }
-};
-
-/**
- * Returns last months backup folder name.
- *
- * @param {string} groupBy the frequency to prune the backups (monthly,
- * quarterly, yearly)
- * @returns {string} Previous month in the format of YYYY-MM or the format for
- * the previous period that matches the frequency of the groupBy.
- */
-const getPreviousBackupFolder = (groupBy) => {
-  switch (groupBy.toLowerCase) {
     case FREQUENCY_MONTHLY:
-      return dayjs().subtract(1, 'month').format(FORMAT_MONTHLY);
-    case FREQUENCY_QUARTERLY:
-      return dayjs().subtract(3, 'months').format(FORMAT_QUARTERLY);
-    case FREQUENCY_YEARLY:
-      return dayjs().subtract(1, 'year').format(FORMAT_YEARLY);
     default:
-      throw new Error(`Invalid prune frequency: ${groupBy}`);
+      return dayjs().startOf('month');
   }
 };
 
@@ -253,12 +245,7 @@ const getPreviousBackupFolder = (groupBy) => {
  *
  * @param {Promise<string>} domain the domain to backup
  */
-const backup = async (
-  domain,
-  outputDir,
-  raw,
-  groupBy,
-) => {
+const backup = async (domain, outputDir, raw, groupBy) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 

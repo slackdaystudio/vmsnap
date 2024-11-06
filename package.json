@@ -1,6 +1,6 @@
 {
   "name": "vmsnap",
-  "version": "1.0.6-alpha",
+  "version": "1.1.0-alpha",
   "description": "A Node based backup and backup rotation tool for KVM domains.",
   "main": "dist/vmsnap.js",
   "scripts": {
@@ -9,6 +9,7 @@
     "lint": "npx eslint *.js",
     "check-format": "npx prettier --check \"*.js\"",
     "format": "npx prettier --write \"*.js\"",
+    "watch": "rimraf dist && esbuild --minify --platform=node --outdir=dist vmsnap.js libs/*.js --watch",
     "build": "rimraf dist && esbuild --minify --platform=node --outdir=dist vmsnap.js libs/*.js",
     "prepare": "husky install || true"
   },
@@ -65,6 +66,7 @@
   "keywords": [
     "kvm",
     "backup",
+    "incremental",
     "snapshot",
     "rotation",
     "qemu",

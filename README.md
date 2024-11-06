@@ -75,21 +75,23 @@ command. Doing so will install VMSnap which includes a vmsnap bin.
 
 The following CLI switches are available when invoking VMSnap.
 
-| Switch     | Status | Backup | Scrub  |  Type   |                     Examples/Notes                                |
-|------------|--------|--------|--------|---------|-------------------------------------------------------------------|
-| domains    | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                                     |
-| status     | ✅     | -      | -      | boolean | Querys the domain(s)                                              |
-| backup     | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                          |
-| scrub      | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain                  |
-| output     | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed               |
-| verbose    | ✅     | -      | -      | boolean | Prints out extra information when running a status check          |
-| machine    | ✅     | -      | -      | boolean | Removes some output from the status command                       |
-| json       | ✅     | -      | -      | boolean | Outputs the status command is JSON                                |
-| yaml       | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`)          |
-| raw        | -      | ✅     | -      | boolean | Enables raw disk handling                                         |
-| groupBy    | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, or year) | 
-| prune      | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*              |
-| pretty     | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                   |
+| Switch         | Status | Backup | Scrub  |  Type   |                     Examples/Notes                                 |
+|----------------|--------|--------|--------|---------|--------------------------------------------------------------------|
+| domains        | ✅     | ✅     | ✅     | string  | "vm1" or "vm1,vm2,etc" or "*"                                      |
+| status         | ✅     | -      | -      | boolean | Querys the domain(s)                                               |
+| backup         | -      | ✅     | -      | boolean | Does an incremental backup (if possible)                           |
+| scrub          | -      | -      | ✅     | boolean | Cleans checkpoints and bitmaps off of the domain                   |
+| output         | ✅     | ✅     | -      | string  | A full path to a directory where backups are placed                |
+| verbose        | ✅     | -      | -      | boolean | Prints out extra information when running a status check           |
+| machine        | ✅     | -      | -      | boolean | Removes some output from the status command                        |
+| json           | ✅     | -      | -      | boolean | Outputs the status command is JSON                                 |
+| yaml           | ✅     | -      | -      | boolean | Output YAML from the status command (aliased to `--yml`)           |
+| raw            | -      | ✅     | -      | boolean | Enables raw disk handling                                          |
+| groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, or year)  | 
+| prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*               |
+| pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                    |
+| checkpointName | -      | -      | ✅     | boolean | The name of the checkpoint to delete (no effect when scrubType=*)  |
+| scrubType      | -      | -      | ✅     | boolean | The type of item to scrub (checkpoint, bitmap, both, or * for ALL) |
 
 *\*This happens on or after the the middle of the current period (15 days monthly, 45 days quarterly or 180 yearly)*
 
@@ -180,8 +182,8 @@ on disk. Look at the table below for more information.
 
 #### Pruning (Caution)
 
-**Note:** Pruning is destructive.  Be careful when using it and check your 
-backups frequently!
+> **Note:** Pruning is destructive.  Be careful when using it and check your 
+ backups frequently!
 
 Pruning backups may be done by setting `--prune` on the backup command.
 This flag will automatically delete last periods backup once the middle of the
@@ -198,12 +200,23 @@ You can turn on raw disk handling by setting the `--raw` flag.
 
 ### Scrubbing
 
-**Note:** This is an inherently destructive action, be careful!
+> **Note:** These commands are inherently destructive, be careful!
 
-To scrub a VM of checkpoints and bitmaps:
+It is occasionally useful to be able to scrub one or more checkpoints or bitmaps
+from your domain.  Doing so is fairly straight forward with VMSnap but please do
+be cautious.  
+
+Use this command to scrub a single bitmap from your backup disks.  Keep in mind 
+that bitmaps are stored on a per disk basis.  VMSnap will scrub each disk of the 
+bitmap if it find it.
+```sh
+vmsnap --domains="dom1" --scrub --scrubType=bitmap --checkpointName=virtnbdbackup.17
+```
+
+To scrub a domain of **ALL** checkpoints and bitmaps
 
 ```sh
-vmsnap --domains="dom1" --scrub
+vmsnap --domains="dom1" --scrub --scrubType=*
 ```
 
 ## Contributing

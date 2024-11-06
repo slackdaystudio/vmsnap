@@ -2,13 +2,23 @@ import { access } from 'fs/promises';
 import commandExists from 'command-exists';
 import {
   ERR_DOMAINS,
+  ERR_INVALID_SCRUB_TYPE,
   ERR_REQS,
   ERR_SCRUB,
+  ERR_TOO_MANY_COMMANDS,
   logger,
 } from '../vmsnap.js';
 import { cleanupCheckpoints, fetchAllDomains, VIRSH } from './virsh.js';
 import { cleanupBitmaps, QEMU_IMG } from './qemu-img.js';
 import { BACKUP } from './libnbdbackup.js';
+
+const SCRUB_TYPE_CHECKPOINT = 'checkpoint';
+
+const SCRUB_TYPE_BITMAP = 'bitmap';
+
+const SCRUB_TYPE_BOTH = 'both';
+
+const SCRUB_TYPE_ALL = '*';
 
 /**
  * General functions used by vmsnap.
@@ -119,7 +129,11 @@ const fileExists = async (path) => {
  * @returns {Promise<boolean>} true if the scrubbing was successful, false if
  * there was a failure.
  */
-const scrubCheckpointsAndBitmaps = async (domains) => {
+const scrubCheckpointsAndBitmaps = async ({
+  domains,
+  checkpointName,
+  scrubType,
+}) => {
   if (!domains) {
     throw new Error('No domains specified', { code: ERR_DOMAINS });
   }
@@ -132,9 +146,23 @@ const scrubCheckpointsAndBitmaps = async (domains) => {
     for (const domain of await parseArrayParam(domains, fetchAllDomains)) {
       logger.info(`Scrubbing domain: ${domain}`);
 
-      await cleanupCheckpoints(domain);
+      if (scrubType === SCRUB_TYPE_CHECKPOINT) {
+        await cleanupCheckpoints(domain, checkpointName);
+      } else if (scrubType === SCRUB_TYPE_BITMAP) {
+        await cleanupBitmaps(domain, checkpointName);
+      } else if (scrubType === SCRUB_TYPE_BOTH) {
+        await cleanupCheckpoints(domain, checkpointName);
 
-      await cleanupBitmaps(domain);
+        await cleanupBitmaps(domain, checkpointName);
+      } else if (scrubType === '*') {
+        await cleanupCheckpoints(domain);
+
+        await cleanupBitmaps(domain);
+      } else {
+        logger.error('No scrub type specified', {
+          code: ERR_INVALID_SCRUB_TYPE,
+        });
+      }
     }
 
     scrubbed = true;

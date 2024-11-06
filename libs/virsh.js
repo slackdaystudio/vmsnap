@@ -10,6 +10,8 @@ import { logger } from '../vmsnap.js';
 
 export const VIRSH = 'virsh';
 
+export const CHECKPOINT_REGEX = /^virtnbdbackup\.[0-9]*$/;
+
 /**
  * Check if a domain exists on the host system.
  *
@@ -76,7 +78,7 @@ const findCheckpoints = async (domain) => {
  *
  * @param {string} domain the domain to cleanup checkpoints for
  */
-const cleanupCheckpoints = async (domain) => {
+const cleanupCheckpoints = async (domain, checkpointName = undefined) => {
   const checkpoints = await findCheckpoints(domain);
 
   if (checkpoints.length === 0) {
@@ -86,8 +88,13 @@ const cleanupCheckpoints = async (domain) => {
   for (const checkpoint of checkpoints) {
     // Adding just in case we have a checkpoint that isn't ours.  Not sure if 
     // this is possible, but better safe than sorry.
-    if (/^virtnbdbackup\.[0-9]*$/.test(checkpoint) === false) {
+    if (CHECKPOINT_REGEX.test(checkpoint) === false) {
       continue;
+    } 
+    
+    // If we have a checkpoint name and it doesn't match, skip it
+    if (checkpointName && checkpoint !== checkpointName) {
+      continue
     }
 
     const command = [
