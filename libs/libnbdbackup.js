@@ -49,8 +49,12 @@ const PRUNING_FREQUENCIES = [
 
 /**
  * Returns the current months backup folder name in the format for the given
- * pruneFrequency.
+ * groupBy.
  *
+ * @param {string} groupBy how to group the backups by on disk (month, quarter,
+ * bi-annual, year)
+ * @param {boolean} current true if the current months folder will be returned,
+ * false will return last months folder.
  * @returns {string} the current months backup folder name
  */
 const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
@@ -218,7 +222,7 @@ const isPruningRequired = async (domain, groupBy, pruneFrequency, path) => {
 
 /**
  * Removes all backups for the previous period.  The period is determined by the
- * pruneFrequency param.
+ * groupBy param.
  *
  * @param {string} domain the domain to prune backups for
  * @param {*} groupBy how often to prune the backups (monthly, quarterly,

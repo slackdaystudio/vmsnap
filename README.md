@@ -23,17 +23,8 @@ You must have the following on your host OS:
 
 Getting these installed is out of scope for this doc.
 
-Run the following command if you are not sure if you have them on your host OS.
- 
- ```sh
-vmsnap --domains=vm1 --status
- ```
-
-> **Tip:** Make sure you substitute "vm1" with the name of one of your VMs.  You
-> may also omit the domains flag altogther to allow VMSnap to query for all VMs.
-
-
-The app will let you know if you are missing any required programs.
+The app will let you know if you are missing any required programs when you 
+start running commands with it.
 
 ## Installation
 

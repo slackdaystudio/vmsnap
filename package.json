@@ -1,6 +1,6 @@
 {
   "name": "vmsnap",
-  "version": "1.2.1-alpha",
+  "version": "1.0.0-beta",
   "description": "A Node based backup and backup rotation tool for KVM domains.",
   "main": "dist/vmsnap.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "format": "npx prettier --write \"*.js\"",
     "watch": "rimraf dist && esbuild --minify --platform=node --outdir=dist vmsnap.js libs/*.js --watch",
     "build": "rimraf dist && esbuild --minify --platform=node --outdir=dist vmsnap.js libs/*.js",
-    "prepare": "husky install || true"
+    "prepare": "husky || true"
   },
   "author": "Philip J. Guinchard",
   "license": "MIT",
@@ -40,10 +40,10 @@
     "@babel/preset-react": "^7.24.7",
     "@types/yargs": "^17.0.33",
     "esbuild": "^0.24.0",
-    "eslint": "^9.9.0",
+    "eslint": "^9.16.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "husky": "^8.0.0",
+    "husky": "^9.1.7",
     "lint-staged": "^15.2.9",
     "prettier": "^3.3.3",
     "rimraf": "^6.0.1"

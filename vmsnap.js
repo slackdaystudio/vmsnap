@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { exit } from 'process';
+import { exit, process } from 'process';
 import { exec } from 'child_process';
 import util from 'util';
 import { tmpdir } from 'os';
