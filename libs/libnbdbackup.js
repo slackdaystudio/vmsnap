@@ -67,10 +67,10 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
         : dayjs().subtract(3, 'months').format(FORMAT_QUARTERLY);
       break;
     case FREQUENCY_BI_ANNUALLY:
-      let yearPart = dayjs().dayOfYear() >= 180 ? '2' : '1';
+      let yearPart = dayjs().dayOfYear() >= 180 ? 2 : 1;
 
       if (!current) {
-        yearPart = dayjs().subtract(6, 'months').dayOfYear() >= 180 ? '2' : '1';
+        yearPart = yearPart === 1 ? 2 : 1;
       }
 
       const format = `${FORMAT_BI_ANNUALLY}p${yearPart}`;
@@ -184,6 +184,8 @@ const isPruningRequired = async (domain, groupBy, pruneFrequency, path) => {
   }
 
   const previousBackupFolder = getBackupFolder(groupBy, false);
+
+  console.log(previousBackupFolder);
 
   if (previousBackupFolder === undefined) {
     logger.info('Unable to determine previous backup folder, skipping pruning');
