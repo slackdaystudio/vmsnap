@@ -74,7 +74,13 @@ jobs:
             nbdkit
 
           # Install virtnbdbackup from GitHub (not available on PyPI)
-          pip3 install git+https://github.com/abbbi/virtnbdbackup.git
+          # Use sudo since tests run as root, and --break-system-packages for Ubuntu 24.04+ PEP 668
+          sudo pip3 install --break-system-packages git+https://github.com/abbbi/virtnbdbackup.git
+
+          # Verify installation
+          echo "Checking virtnbdbackup installation..."
+          which virtnbdbackup && virtnbdbackup --version
+          sudo which virtnbdbackup && sudo virtnbdbackup --version
 
       - name: Create test directory
         if: steps.kvm-check.outputs.kvm_available == 'true'
