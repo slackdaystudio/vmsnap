@@ -82,6 +82,11 @@ jobs:
           sudo mkdir -p /tmp/vmsnap-integration-test
           sudo chown -R $USER:$USER /tmp/vmsnap-integration-test
 
+      - name: Create test VMs
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          sudo bash test/integration/setup/create-test-vms.sh
+
       - name: Run integration tests
         if: steps.kvm-check.outputs.kvm_available == 'true'
         run: |
