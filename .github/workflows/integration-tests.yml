@@ -1,0 +1,124 @@
+# Integration tests workflow for VMSnap
+# Runs integration tests with real KVM/libvirt infrastructure
+
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    # Integration tests require KVM which may not be available in all runners
+    # This job may need to run on a self-hosted runner with KVM support
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check KVM availability
+        id: kvm-check
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo "kvm_available=true" >> $GITHUB_OUTPUT
+            echo "KVM is available"
+          else
+            echo "kvm_available=false" >> $GITHUB_OUTPUT
+            echo "KVM is NOT available - integration tests will be skipped"
+          fi
+
+      - name: Setup KVM/libvirt
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            qemu-kvm \
+            libvirt-daemon-system \
+            libvirt-clients \
+            virtinst \
+            qemu-utils
+
+          # Start libvirtd
+          sudo systemctl start libvirtd
+          sudo systemctl enable libvirtd
+
+          # Add current user to libvirt group
+          sudo usermod -aG kvm,libvirt $USER
+
+          # Verify libvirt connection
+          sudo virsh version
+
+      - name: Install virtnbdbackup
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          # Install virtnbdbackup dependencies
+          sudo apt-get install -y \
+            python3-pip \
+            python3-libvirt \
+            libnbd-bin \
+            nbdkit
+
+          # Install virtnbdbackup
+          pip3 install virtnbdbackup || echo "virtnbdbackup installation may require additional setup"
+
+      - name: Create test directory
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          sudo mkdir -p /tmp/vmsnap-integration-test
+          sudo chown -R $USER:$USER /tmp/vmsnap-integration-test
+
+      - name: Run integration tests
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          # Run with sudo to access libvirt
+          sudo -E npm run test:integration
+        env:
+          CI: true
+          NODE_ENV: test
+
+      - name: Cleanup test environment
+        if: always() && steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          sudo bash test/integration/setup/cleanup-test-env.sh --full || true
+
+      - name: Skip notice
+        if: steps.kvm-check.outputs.kvm_available != 'true'
+        run: |
+          echo "::warning::Integration tests were skipped because KVM is not available on this runner."
+          echo "To run integration tests, use a runner with KVM support (e.g., self-hosted runner with nested virtualization)."
+
+  # Unit tests run on all pushes
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run linting
+        run: npm run lint

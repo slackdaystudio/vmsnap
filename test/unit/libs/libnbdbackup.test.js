@@ -44,7 +44,12 @@ vi.mock('../../../libs/virsh.js', () => ({
 
 vi.mock('../../../libs/general.js', () => ({
   fileExists: vi.fn(),
-  parseArrayParam: vi.fn()
+  parseArrayParam: vi.fn(),
+  createError: vi.fn((message, code) => {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }),
 }));
 
 vi.mock('../../../libs/qemu-img.js', () => ({
@@ -201,12 +206,12 @@ describe('libnbdbackup.js', () => {
 
     test('throws error when no domains specified', async () => {
       await expect(performBackup({ domains: null, output: '/backup' }))
-        .rejects.toThrow('ERR_DOMAINS is not defined');
+        .rejects.toThrow('No domains specified');
     });
 
     test('throws error when no output directory specified', async () => {
       await expect(performBackup({ domains: 'test-domain', output: null }))
-        .rejects.toThrow('ERR_OUTPUT_DIR is not defined');
+        .rejects.toThrow('No output directory specified');
     });
 
     test('performs cleanup when backup folder does not exist', async () => {
@@ -372,7 +377,6 @@ describe('libnbdbackup.js', () => {
       expect(childProcessModule.spawn).toHaveBeenCalledWith(
         'virtnbdbackup',
         [
-          '-S',
           '--noprogress',
           '-d',
           'test-domain',

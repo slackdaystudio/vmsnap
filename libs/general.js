@@ -21,6 +21,19 @@ const SCRUB_TYPE_BOTH = 'both';
 const SCRUB_TYPE_ALL = '*';
 
 /**
+ * Creates an error with a code property set for proper exit code handling.
+ *
+ * @param {string} message the error message
+ * @param {number} code the error code
+ * @returns {Error} an error with the code property set
+ */
+const createError = (message, code) => {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+};
+
+/**
  * General functions used by vmsnap.
  *
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
@@ -43,7 +56,7 @@ const checkDependencies = async () => {
   }
 
   if (missingPrograms.length > 0) {
-    throw new Error(
+    throw createError(
       `Missing dependencies (${missingPrograms.join(', ')})`,
       ERR_REQS,
     );
@@ -72,11 +85,25 @@ const checkCommand = ({ status, scrub, backup }) => {
   }
 
   if (commandCount > 1) {
-    throw new Error(
+    throw createError(
       'Only one command can be run at a time',
       ERR_TOO_MANY_COMMANDS,
     );
   }
+};
+
+/**
+ * Converts a glob/wildcard pattern to a regular expression.
+ *
+ * @param {string} pattern the glob pattern to convert
+ * @returns {RegExp} the regular expression
+ */
+const globToRegex = (pattern) => {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars except * and ?
+    .replace(/\*/g, '.*') // Convert * to .*
+    .replace(/\?/g, '.'); // Convert ? to .
+  return new RegExp(`^${escaped}$`);
 };
 
 /**
@@ -94,9 +121,31 @@ const parseArrayParam = async (param, fetchAll = async () => []) => {
   }
 
   if (param.indexOf(',') > -1) {
-    parsed = param.split(',');
+    // Handle comma-separated list - each item may contain wildcards
+    const items = param.split(',');
+    const allItems = await fetchAll();
+
+    for (const item of items) {
+      if (item.includes('*') || item.includes('?')) {
+        // Item contains wildcards - filter all items against the pattern
+        const regex = globToRegex(item);
+        const matches = allItems.filter((d) => regex.test(d));
+        parsed.push(...matches);
+      } else {
+        // No wildcards - add as-is
+        parsed.push(item);
+      }
+    }
+
+    // Remove duplicates
+    parsed = [...new Set(parsed)];
   } else if (param === '*') {
     parsed = await fetchAll();
+  } else if (param.includes('*') || param.includes('?')) {
+    // Handle wildcard pattern like "vmsnap-test-*"
+    const allItems = await fetchAll();
+    const regex = globToRegex(param);
+    parsed = allItems.filter((d) => regex.test(d));
   } else if (typeof param === 'string') {
     parsed.push(param);
   } else {
@@ -135,15 +184,21 @@ const scrubCheckpointsAndBitmaps = async ({
   scrubType,
 }) => {
   if (!domains) {
-    throw new Error('No domains specified', { code: ERR_DOMAINS });
+    throw createError('No domains specified', ERR_DOMAINS);
   }
 
   logger.info('Scrubbing checkpoints and bitmaps');
 
   let scrubbed = false;
 
+  const parsedDomains = await parseArrayParam(domains, fetchAllDomains);
+
+  if (parsedDomains.length === 0) {
+    throw createError(`No matching domains found for: ${domains}`, ERR_DOMAINS);
+  }
+
   try {
-    for (const domain of await parseArrayParam(domains, fetchAllDomains)) {
+    for (const domain of parsedDomains) {
       logger.info(`Scrubbing domain: ${domain}`);
 
       if (scrubType === SCRUB_TYPE_CHECKPOINT) {
@@ -159,17 +214,20 @@ const scrubCheckpointsAndBitmaps = async ({
 
         await cleanupBitmaps(domain);
       } else {
-        logger.error('No scrub type specified', {
-          code: ERR_INVALID_SCRUB_TYPE,
-        });
+        throw createError(
+          `Invalid scrub type: ${scrubType}`,
+          ERR_INVALID_SCRUB_TYPE,
+        );
       }
     }
 
     scrubbed = true;
   } catch (err) {
-    logger.error(err.message, { code: ERR_SCRUB });
-
-    scrubbed = false;
+    // Re-throw errors with proper codes
+    if (err.code) {
+      throw err;
+    }
+    throw createError(err.message, ERR_SCRUB);
   }
 
   return scrubbed;
@@ -196,6 +254,7 @@ const findKeyByValue = (map, value) => {
 export {
   checkDependencies,
   checkCommand,
+  createError,
   fileExists,
   findKeyByValue,
   parseArrayParam,

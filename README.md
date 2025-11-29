@@ -226,6 +226,7 @@ VMSnap maintains enterprise-grade quality standards with comprehensive testing:
 
 ### Test Coverage
 - **188 unit tests** across all modules
+- **50 integration tests** against real KVM virtual machines
 - **92.07% line coverage** (target: 90%+)
 - **85.71% function coverage** (target: 95%+)
 - **Complete CI/CD integration** with GitHub Actions
@@ -244,6 +245,88 @@ npm run test:watch
 # Run only unit tests
 npm run test:unit
 ```
+
+### Integration Tests
+
+VMSnap includes a comprehensive integration test suite that tests real backup operations against actual KVM virtual machines. These tests require a KVM-enabled environment.
+
+#### Prerequisites for Integration Tests
+
+- **KVM/QEMU** with hardware virtualization support
+- **libvirt** daemon running (`libvirtd`)
+- **virtnbdbackup** installed and configured
+- **qemu-img** and **virsh** command-line tools
+- User must have permissions to create/manage VMs (typically `libvirt` and `kvm` groups)
+
+#### Running Integration Tests Locally
+
+```sh
+# Verify KVM is available
+ls -la /dev/kvm
+
+# Verify libvirt connection
+virsh version
+
+# Run integration tests
+npm run test:integration
+
+# Optional: Setup test VMs manually
+npm run test:integration:setup
+
+# Optional: Cleanup test environment
+npm run test:integration:cleanup
+```
+
+#### Integration Test Categories
+
+| Test Suite | Tests | Description |
+|------------|-------|-------------|
+| `backup-operations.test.js` | 6 | Single/multiple VM backups, wildcards, selective domains |
+| `incremental-backup.test.js` | 7 | Full and incremental backup chains, disk change handling |
+| `rotation-pruning.test.js` | 7 | Monthly/quarterly/bi-annual/yearly grouping and pruning |
+| `scrubbing-operations.test.js` | 6 | Checkpoint and bitmap cleanup (handles offline VMs) |
+| `status-commands.test.js` | 11 | Status output in text/JSON/YAML formats, multiple VMs |
+| `error-scenarios.test.js` | 13 | Error handling, invalid inputs, concurrent execution |
+
+#### Running on a Self-Hosted GitHub Actions Runner
+
+Integration tests can run in CI using a self-hosted runner with KVM support:
+
+1. **Set up a self-hosted runner** with nested virtualization enabled:
+   ```sh
+   # On the runner host, verify KVM support
+   egrep -c '(vmx|svm)' /proc/cpuinfo  # Should return > 0
+
+   # Install required packages (Ubuntu/Debian)
+   sudo apt-get install -y qemu-kvm libvirt-daemon-system libvirt-clients virtinst qemu-utils
+
+   # Install virtnbdbackup
+   pip3 install virtnbdbackup
+
+   # Add runner user to required groups
+   sudo usermod -aG kvm,libvirt $USER
+
+   # Start libvirt
+   sudo systemctl enable --now libvirtd
+   ```
+
+2. **Configure the runner** following [GitHub's self-hosted runner documentation](https://docs.github.com/en/actions/hosting-your-own-runners)
+
+3. **Update the workflow** to use your self-hosted runner:
+   ```yaml
+   # In .github/workflows/integration-tests.yml
+   jobs:
+     integration-tests:
+       runs-on: self-hosted  # Change from ubuntu-latest
+   ```
+
+#### Why Integration Tests Skip on GitHub-Hosted Runners
+
+Standard GitHub-hosted runners (`ubuntu-latest`) don't expose `/dev/kvm` because nested virtualization is disabled. The integration test workflow automatically detects this and:
+- Skips integration tests with a warning
+- Still runs all unit tests successfully
+
+This ensures CI doesn't fail while allowing full integration testing on capable environments.
 
 ### Code Quality
 ```sh
@@ -308,16 +391,24 @@ npm audit
 ```
 vmsnap/
 ├── libs/                 # Core modules
-│   ├── general.js       # Utility functions & dependency checking
-│   ├── libnbdbackup.js  # Main backup orchestration
-│   ├── print.js         # Output formatting
-│   ├── qemu-img.js      # QEMU image operations
-│   ├── serialization.js # Status collection & analysis
-│   └── virsh.js         # KVM domain management
+│   ├── general.js       # Utility functions, dependency checking, error handling
+│   ├── libnbdbackup.js  # Main backup orchestration with virtnbdbackup
+│   ├── print.js         # Output formatting (text, JSON, YAML)
+│   ├── qemu-img.js      # QEMU image operations & bitmap management
+│   ├── serialization.js # Status collection & integrity analysis
+│   └── virsh.js         # KVM domain & checkpoint management
 ├── test/
-│   └── unit/            # Comprehensive unit test suite
+│   ├── unit/            # 188 unit tests across all modules
+│   │   └── libs/        # Module-specific unit tests
+│   └── integration/     # 50 integration tests with real KVM VMs
+│       ├── helpers/     # VM lifecycle management & test assertions
+│       │   ├── vm-manager.js      # Create/destroy test VMs
+│       │   ├── test-assertions.js # Backup verification helpers
+│       │   └── cleanup-helpers.js # Environment cleanup
+│       ├── setup/       # Shell scripts for test environment
+│       └── tests/       # 6 integration test suites
 ├── dist/                # Built output (generated)
-└── vmsnap.js           # Main CLI entry point
+└── vmsnap.js           # Main CLI entry point with argument parsing
 ```
 
 ### Architecture
@@ -421,15 +512,26 @@ for details.
 🎉 **Major Quality & Security Release**
 
 **New Features:**
-- ✨ Comprehensive test suite with 188 unit tests
-- 📊 92% test coverage across all modules  
+- ✨ Comprehensive test suite with 188 unit tests and 50 integration tests
+- 📊 92% test coverage across all modules
 - 🛡️ Zero security vulnerabilities (fixed 7 issues)
 - 🚀 Enhanced performance with edge case handling
-- 📈 Improved error reporting and validation
+- 📈 Improved error reporting and validation with proper exit codes
+
+**Integration Test Suite:**
+- 🧪 Full end-to-end testing against real KVM virtual machines
+- 💾 Tests for backup operations (single VM, multiple VMs, wildcards)
+- 🔄 Incremental backup chain validation
+- 📅 Backup rotation testing (monthly, quarterly, bi-annual, yearly)
+- 🧹 Checkpoint and bitmap scrubbing verification
+- 📊 Status command output validation (text, JSON, YAML)
+- ⚠️ Comprehensive error scenario coverage
+- 🔌 Automatic libvirt connection handling (system/session)
+- ⏸️ Graceful handling of offline VMs (copy mode vs checkpoints)
 
 **Security & Dependencies:**
 - 🔒 Updated all dependencies to latest secure versions
-- 🛠️ Removed unnecessary React/Babel dependencies  
+- 🛠️ Removed unnecessary React/Babel dependencies
 - ⚡ Updated build tools (esbuild 0.24→0.27)
 - 🔍 Added automated security auditing
 
@@ -439,10 +541,16 @@ for details.
 - 🔧 Improved development workflow and standards
 - 📝 Updated contribution guidelines with testing requirements
 
+**Bug Fixes:**
+- 🐛 Fixed error code propagation (errors now return proper exit codes)
+- 🐛 Fixed virtnbdbackup command arguments
+- 🐛 Improved empty domain list handling with clear error messages
+
 **Infrastructure:**
-- ✅ GitHub Actions CI/CD integration  
+- ✅ GitHub Actions CI/CD integration
 - 📦 Automated testing and security checks
 - 🏗️ Optimized build process and distribution
+- 🔄 Sequential test execution for VM operations
 
 ## Contact
 
@@ -450,4 +558,4 @@ For any questions or feedback, please open an issue on GitHub.
 
 ---
 
-**VMSnap v1.1.0-beta** - Production-ready KVM backup solution with enterprise-grade testing and security.
+**VMSnap v1.1.0-beta** - Production-ready KVM backup solution with 238 tests (188 unit + 50 integration) and enterprise-grade reliability.

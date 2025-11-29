@@ -5,9 +5,9 @@ import dayjs from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 import dayOfYear from 'dayjs/plugin/dayOfYear.js';
-import { logger } from '../vmsnap.js';
+import { logger, ERR_DOMAINS, ERR_OUTPUT_DIR } from '../vmsnap.js';
 import { cleanupCheckpoints, domainExists, fetchAllDomains } from './virsh.js';
-import { fileExists, parseArrayParam } from './general.js';
+import { createError, fileExists, parseArrayParam } from './general.js';
 import { cleanupBitmaps } from './qemu-img.js';
 
 /**
@@ -102,16 +102,22 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
  *
  * @param {Object} args the command line arguments (domans, output, raw, prune)
  */
-const performBackup = async ({ domains, output, raw, groupBy, prune }) => {
+const performBackup = async ({ domains, output, raw, groupBy, prune, connect }) => {
   if (!domains) {
-    throw new Error('No domains specified', { code: ERR_DOMAINS });
+    throw createError('No domains specified', ERR_DOMAINS);
   }
 
   if (!output) {
-    throw new Error('No output directory specified', { code: ERR_OUTPUT_DIR });
+    throw createError('No output directory specified', ERR_OUTPUT_DIR);
   }
 
-  for (const domain of await parseArrayParam(domains, fetchAllDomains)) {
+  const parsedDomains = await parseArrayParam(domains, fetchAllDomains);
+
+  if (parsedDomains.length === 0) {
+    throw createError(`No matching domains found for: ${domains}`, ERR_DOMAINS);
+  }
+
+  for (const domain of parsedDomains) {
     if (await isCleanupRequired(domain, groupBy, output)) {
       logger.info('Creating a new backup directory, running bitmap cleanup');
 
@@ -120,7 +126,7 @@ const performBackup = async ({ domains, output, raw, groupBy, prune }) => {
       await cleanupBitmaps(domain);
     }
 
-    await backup(domain, output, raw, groupBy);
+    await backup(domain, output, raw, groupBy, connect);
 
     if (await isPruningRequired(domain, groupBy, prune, output)) {
       logger.info(
@@ -272,9 +278,13 @@ const getBackupStartDate = (groupBy) => {
 /**
  * Perform a backup of a domain, running or stopped.
  *
- * @param {Promise<string>} domain the domain to backup
+ * @param {string} domain the domain to backup
+ * @param {string} outputDir the output directory for the backup
+ * @param {boolean} raw whether to use raw format
+ * @param {string} groupBy the grouping frequency
+ * @param {string|undefined} connect the libvirt connection URI
  */
-const backup = async (domain, outputDir, raw, groupBy) => {
+const backup = async (domain, outputDir, raw, groupBy, connect) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 
@@ -282,7 +292,6 @@ const backup = async (domain, outputDir, raw, groupBy) => {
   }
 
   const commandOpts = [
-    '-S',
     '--noprogress',
     '-d',
     domain,
@@ -294,6 +303,10 @@ const backup = async (domain, outputDir, raw, groupBy) => {
 
   if (raw) {
     commandOpts.push('--raw');
+  }
+
+  if (connect) {
+    commandOpts.push('-U', connect);
   }
 
   const child = spawn(BACKUP, commandOpts, {

@@ -12,6 +12,30 @@ export const VIRSH = 'virsh';
 
 export const CHECKPOINT_REGEX = /^virtnbdbackup\.[0-9]*$/;
 
+// The libvirt connection URI (e.g., qemu:///system or qemu:///session)
+let libvirtUri = null;
+
+/**
+ * Sets the libvirt connection URI for all virsh commands.
+ *
+ * @param {string|undefined} uri the libvirt URI to use
+ */
+export const setLibvirtUri = (uri) => {
+  libvirtUri = uri;
+};
+
+/**
+ * Gets the base virsh command with connection URI if set.
+ *
+ * @returns {string[]} the base virsh command array
+ */
+const getVirshCommand = () => {
+  if (libvirtUri) {
+    return [VIRSH, '-c', libvirtUri];
+  }
+  return [VIRSH];
+};
+
 /**
  * Check if a domain exists on the host system.
  *
@@ -27,7 +51,7 @@ const domainExists = async (domain) => {
     return false;
   }
 
-  const command = [VIRSH, 'domstate', domain];
+  const command = [...getVirshCommand(), 'domstate', domain];
 
   try {
     await asyncExec(command.join(' '));
@@ -44,7 +68,7 @@ const domainExists = async (domain) => {
  * @returns {Promise<Array<string>>} List of all domains
  */
 const fetchAllDomains = async () => {
-  const command = [VIRSH, 'list', '--all', '--name'];
+  const command = [...getVirshCommand(), 'list', '--all', '--name'];
 
   const { stdout, stderr } = await asyncExec(command.join(' '));
 
@@ -62,7 +86,7 @@ const fetchAllDomains = async () => {
  * @returns {Promise<Array<string>} a list of checkpoints for the domain
  */
 const findCheckpoints = async (domain) => {
-  const command = [VIRSH, 'checkpoint-list', domain, '--name'];
+  const command = [...getVirshCommand(), 'checkpoint-list', domain, '--name'];
 
   const { stdout, stderr } = await asyncExec(command.join(' '));
 
@@ -98,7 +122,7 @@ const cleanupCheckpoints = async (domain, checkpointName = undefined) => {
     }
 
     const command = [
-      VIRSH,
+      ...getVirshCommand(),
       'checkpoint-delete',
       domain,
       checkpoint,
@@ -124,7 +148,7 @@ const cleanupCheckpoints = async (domain, checkpointName = undefined) => {
 const fetchAllDisks = async (domain) => {
   const diskList = new Map();
 
-  const command = [VIRSH, 'domblklist', domain, '--details'];
+  const command = [...getVirshCommand(), 'domblklist', domain, '--details'];
 
   const { stdout, stderr } = await asyncExec(command.join(' '));
 

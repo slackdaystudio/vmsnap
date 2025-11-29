@@ -9,7 +9,12 @@ vi.mock('fs/promises', () => ({
 
 vi.mock('../../../libs/general.js', () => ({
   fileExists: vi.fn(),
-  parseArrayParam: vi.fn()
+  parseArrayParam: vi.fn(),
+  createError: vi.fn((message, code) => {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }),
 }));
 
 vi.mock('../../../libs/qemu-img.js', () => ({
@@ -24,6 +29,10 @@ vi.mock('../../../libs/virsh.js', () => ({
 vi.mock('../../../libs/libnbdbackup.js', () => ({
   FREQUENCY_MONTHLY: 'month',
   getBackupFolder: vi.fn()
+}));
+
+vi.mock('../../../vmsnap.js', () => ({
+  ERR_DOMAINS: 1,
 }));
 
 describe('serialization.js', () => {
@@ -252,12 +261,10 @@ describe('serialization.js', () => {
       });
     });
 
-    test('handles empty domains list', async () => {
+    test('throws error for empty domains list', async () => {
       generalModule.parseArrayParam.mockResolvedValue([]);
 
-      const result = await getStatus('');
-
-      expect(result).toEqual({});
+      await expect(getStatus('')).rejects.toThrow('No matching domains found');
     });
 
     test('handles domains with no disks', async () => {

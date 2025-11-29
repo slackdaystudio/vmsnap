@@ -1,10 +1,11 @@
 import { sep } from 'path';
 import { readdir, stat } from 'fs/promises';
 import prettyBytes from 'pretty-bytes';
-import { fileExists, parseArrayParam } from './general.js';
+import { createError, fileExists, parseArrayParam } from './general.js';
 import { findBitmaps } from './qemu-img.js';
 import { fetchAllDomains, findCheckpoints } from './virsh.js';
 import { FREQUENCY_MONTHLY, getBackupFolder } from './libnbdbackup.js';
+import { ERR_DOMAINS } from '../vmsnap.js';
 
 // The all-clear code for the status of a domain
 export const STATUS_OK = 0;
@@ -43,6 +44,10 @@ const getStatus = async (
   const json = {};
 
   const domains = await parseArrayParam(rawDomains, fetchAllDomains);
+
+  if (domains.length === 0) {
+    throw createError(`No matching domains found for: ${rawDomains}`, ERR_DOMAINS);
+  }
 
   let currentJson = {};
 

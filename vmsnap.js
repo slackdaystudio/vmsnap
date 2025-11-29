@@ -16,6 +16,7 @@ import {
 } from './libs/general.js';
 import { performBackup } from './libs/libnbdbackup.js';
 import { printStatusCheck, SCREEN_SIZE } from './libs/print.js';
+import { setLibvirtUri } from './libs/virsh.js';
 
 /**
  * This script is designed to backup KVM virtual machines using the
@@ -74,6 +75,11 @@ export const asyncExec = util.promisify(exec);
 // Parse command line arguments
 const argv = Yargs(process.argv.slice(2)).argv;
 
+// Set the libvirt connection URI if provided (e.g., qemu:///system or qemu:///session)
+if (argv.connect) {
+  setLibvirtUri(argv.connect);
+}
+
 // The formats for the logger
 let formats = [];
 
@@ -125,7 +131,14 @@ export const logger = winston.createLogger({
 let exitCode = 0;
 
 // Run with a lock to prevent multiple instances from running
-lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
+lock(lockfile, { retries: 10, retryWait: 10000 }, async (lockErr) => {
+  // Handle lock acquisition failure
+  if (lockErr) {
+    logger.error(`Failed to acquire lock: ${lockErr.message}`);
+    exit(ERR_MAIN);
+    return;
+  }
+
   try {
     await checkDependencies();
 
@@ -147,7 +160,8 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
 
     logger.error(err.message);
 
-    exitCode = err.code || ERR_MAIN;
+    // Ensure err.code is a number, otherwise use ERR_MAIN
+    exitCode = typeof err.code === 'number' ? err.code : ERR_MAIN;
   } finally {
     spinner.stop();
 
@@ -162,7 +176,7 @@ lock(lockfile, { retries: 10, retryWait: 10000 }, async () => {
         exitCode = ERR_LOCK_RELEASE;
       }
 
-      exit(exitCode || ERR_MAIN);
+      exit(exitCode !== undefined ? exitCode : ERR_MAIN);
     });
   }
 });

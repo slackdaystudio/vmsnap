@@ -38,7 +38,12 @@ vi.mock('../../../libs/virsh.js', () => ({
 
 vi.mock('../../../libs/general.js', () => ({
   fileExists: vi.fn(),
-  parseArrayParam: vi.fn()
+  parseArrayParam: vi.fn(),
+  createError: vi.fn((message, code) => {
+    const err = new Error(message);
+    err.code = code;
+    return err;
+  }),
 }));
 
 vi.mock('../../../libs/qemu-img.js', () => ({

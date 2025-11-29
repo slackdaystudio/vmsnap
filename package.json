@@ -1,12 +1,15 @@
 {
   "name": "vmsnap",
-  "version": "1.1.0-beta",
+  "version": "2.0.0-beta",
   "description": "A Node based backup and backup rotation tool for KVM domains.",
   "main": "dist/vmsnap.js",
   "scripts": {
     "vmsnap": "node vmsnap.js",
     "test": "vitest",
     "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration/tests --testTimeout=300000 --no-file-parallelism",
+    "test:integration:setup": "bash test/integration/setup/create-test-vms.sh",
+    "test:integration:cleanup": "bash test/integration/setup/cleanup-test-env.sh",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "lint": "npx eslint *.js",

@@ -280,35 +280,27 @@ describe('general.js', () => {
       expect(qemuImgModule.cleanupBitmaps).toHaveBeenCalledWith('vm1');
     });
 
-    test('logs error for invalid scrub type', async () => {
+    test('throws error for invalid scrub type', async () => {
       virshModule.fetchAllDomains.mockResolvedValue(['vm1']);
 
-      const result = await scrubCheckpointsAndBitmaps({
-        domains: 'vm1',
-        scrubType: 'invalid'
-      });
-
-      expect(result).toBe(true); // Still returns true as no exception thrown
-      expect(vmSnapModule.logger.error).toHaveBeenCalledWith(
-        'No scrub type specified',
-        { code: 5 }
-      );
+      await expect(
+        scrubCheckpointsAndBitmaps({
+          domains: 'vm1',
+          scrubType: 'invalid',
+        })
+      ).rejects.toThrow('Invalid scrub type: invalid');
     });
 
-    test('returns false when cleanup fails', async () => {
+    test('throws error when cleanup fails', async () => {
       virshModule.fetchAllDomains.mockResolvedValue(['vm1']);
       virshModule.cleanupCheckpoints.mockRejectedValue(new Error('Cleanup failed'));
 
-      const result = await scrubCheckpointsAndBitmaps({
-        domains: 'vm1',
-        scrubType: 'checkpoint'
-      });
-
-      expect(result).toBe(false);
-      expect(vmSnapModule.logger.error).toHaveBeenCalledWith(
-        'Cleanup failed',
-        { code: 6 }
-      );
+      await expect(
+        scrubCheckpointsAndBitmaps({
+          domains: 'vm1',
+          scrubType: 'checkpoint',
+        })
+      ).rejects.toThrow('Cleanup failed');
     });
   });
 });
