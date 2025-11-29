@@ -69,11 +69,12 @@ jobs:
           sudo apt-get install -y \
             python3-pip \
             python3-libvirt \
+            python3-libnbd \
             libnbd-bin \
             nbdkit
 
-          # Install virtnbdbackup
-          pip3 install virtnbdbackup || echo "virtnbdbackup installation may require additional setup"
+          # Install virtnbdbackup from GitHub (not available on PyPI)
+          pip3 install git+https://github.com/abbbi/virtnbdbackup.git
 
       - name: Create test directory
         if: steps.kvm-check.outputs.kvm_available == 'true'
