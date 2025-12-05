@@ -32,6 +32,9 @@ import { setLibvirtUri } from './libs/virsh.js';
  * domain and a subdirectory for each year/month.
  * --prune=<true|false> (Optional), this will delete the previous month's
  * backups if it's the middle of the month and the backups exist.
+ * --start-domain (Optional), start offline domains in paused state for backup.
+ * This enables full checkpoint creation for offline VMs, allowing incremental
+ * backups. Without this flag, offline VMs use copy mode without checkpoints.
  *
  * @author: Philip J. Guinchard <phil.guinchard@slackdaystudio.ca>
  */
