@@ -37,6 +37,24 @@ const getVirshCommand = () => {
 };
 
 /**
+ * Check if a domain is currently running.
+ *
+ * @param {string} domain the name of the domain
+ * @returns {Promise<boolean>} True if domain is running, false if shut off or doesn't exist
+ */
+const isDomainRunning = async (domain) => {
+  const command = [...getVirshCommand(), 'domstate', domain];
+
+  try {
+    const { stdout } = await asyncExec(command.join(' '));
+    const state = stdout.trim().toLowerCase();
+    return state === 'running';
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Check if a domain exists on the host system.
  *
  * @param {string} domain the name of the domain
@@ -170,6 +188,7 @@ const fetchAllDisks = async (domain) => {
 
 export {
   domainExists,
+  isDomainRunning,
   fetchAllDomains,
   findCheckpoints,
   cleanupCheckpoints,

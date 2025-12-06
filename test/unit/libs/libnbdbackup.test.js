@@ -39,6 +39,7 @@ vi.mock('../../../vmsnap.js', () => ({
 vi.mock('../../../libs/virsh.js', () => ({
   cleanupCheckpoints: vi.fn(),
   domainExists: vi.fn(),
+  isDomainRunning: vi.fn(),
   fetchAllDomains: vi.fn()
 }));
 
@@ -201,6 +202,7 @@ describe('libnbdbackup.js', () => {
       // Setup default mocks
       generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
       virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true); // Default to running VM
       generalModule.fileExists.mockResolvedValue(false); // No existing backup folder
     });
 
@@ -431,6 +433,56 @@ describe('libnbdbackup.js', () => {
 
       expect(vmSnapModule.logger.warn).toHaveBeenCalledWith('test-domain does not exist');
       expect(childProcessModule.spawn).not.toHaveBeenCalled();
+    });
+
+    test('adds -S flag for offline VMs to enable checkpoint creation', async () => {
+      virshModule.isDomainRunning.mockResolvedValue(false); // VM is offline
+      generalModule.fileExists.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      expect(vmSnapModule.logger.info).toHaveBeenCalledWith(
+        'test-domain is offline, starting in paused state for checkpoint backup'
+      );
+      expect(childProcessModule.spawn).toHaveBeenCalledWith(
+        'virtnbdbackup',
+        expect.arrayContaining(['-S']),
+        expect.any(Object)
+      );
+    });
+
+    test('does not add -S flag for running VMs', async () => {
+      virshModule.isDomainRunning.mockResolvedValue(true); // VM is running
+      generalModule.fileExists.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      const spawnCall = childProcessModule.spawn.mock.calls[0];
+      expect(spawnCall[1]).not.toContain('-S');
     });
 
     test('logs error when backup fails', async () => {

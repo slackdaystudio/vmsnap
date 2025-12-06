@@ -127,14 +127,9 @@ describe('Incremental Backup Operations', () => {
       'first backup creates checkpoint',
       async () => {
         const checkpoints = await getCheckpoints(testVM.name);
-        // Note: Offline VMs don't create checkpoints - they use copy mode
-        const state = await testVM.getState();
-        if (state === 'shut off') {
-          expect(checkpoints.length).toBe(0);
-        } else {
-          expect(checkpoints.length).toBe(1);
-          expect(checkpoints[0]).toMatch(/virtnbdbackup/);
-        }
+        // Offline VMs are now automatically started in paused state for checkpoint creation
+        expect(checkpoints.length).toBe(1);
+        expect(checkpoints[0]).toMatch(/virtnbdbackup/);
       },
       30000
     );
@@ -172,13 +167,8 @@ describe('Incremental Backup Operations', () => {
       'second backup creates additional checkpoint',
       async () => {
         const checkpoints = await getCheckpoints(testVM.name);
-        // Note: Offline VMs don't create checkpoints - they use copy mode
-        const state = await testVM.getState();
-        if (state === 'shut off') {
-          expect(checkpoints.length).toBe(0);
-        } else {
-          expect(checkpoints.length).toBe(2);
-        }
+        // Offline VMs are now automatically started in paused state for checkpoint creation
+        expect(checkpoints.length).toBe(2);
       },
       30000
     );
@@ -219,14 +209,9 @@ describe('Incremental Backup Operations', () => {
           expect(result.exitCode).toBe(0);
         }
 
-        // Verify checkpoints (offline VMs don't create checkpoints)
+        // Verify checkpoints (offline VMs now auto-start in paused state for checkpoint creation)
         const checkpoints = await getCheckpoints(testVM.name);
-        const state = await testVM.getState();
-        if (state === 'shut off') {
-          expect(checkpoints.length).toBe(0);
-        } else {
-          expect(checkpoints.length).toBe(3);
-        }
+        expect(checkpoints.length).toBe(3);
 
         // Verify backup directory exists with content
         expect(await backupExists(TEST_CONFIG.backupDir, testVM.name)).toBe(

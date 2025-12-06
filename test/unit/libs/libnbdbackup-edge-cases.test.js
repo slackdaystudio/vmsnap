@@ -33,6 +33,7 @@ vi.mock('../../../vmsnap.js', () => ({
 vi.mock('../../../libs/virsh.js', () => ({
   cleanupCheckpoints: vi.fn(),
   domainExists: vi.fn(),
+  isDomainRunning: vi.fn(),
   fetchAllDomains: vi.fn()
 }));
 
@@ -56,13 +57,16 @@ describe('libnbdbackup.js edge cases', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    
+
     childProcessModule = await import('child_process');
     fsModule = await import('fs/promises');
     vmSnapModule = await import('../../../vmsnap.js');
     virshModule = await import('../../../libs/virsh.js');
     generalModule = await import('../../../libs/general.js');
     qemuImgModule = await import('../../../libs/qemu-img.js');
+
+    // Setup default mock for isDomainRunning
+    virshModule.isDomainRunning.mockResolvedValue(true);
 
     // Setup mock spawn child process
     mockSpawnChild = {
@@ -73,7 +77,7 @@ describe('libnbdbackup.js edge cases', () => {
       },
       on: vi.fn()
     };
-    
+
     childProcessModule.spawn.mockReturnValue(mockSpawnChild);
   });
 

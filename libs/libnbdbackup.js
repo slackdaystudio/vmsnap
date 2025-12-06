@@ -6,7 +6,7 @@ import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 import dayOfYear from 'dayjs/plugin/dayOfYear.js';
 import { logger, ERR_DOMAINS, ERR_OUTPUT_DIR } from '../vmsnap.js';
-import { cleanupCheckpoints, domainExists, fetchAllDomains } from './virsh.js';
+import { cleanupCheckpoints, domainExists, isDomainRunning, fetchAllDomains } from './virsh.js';
 import { createError, fileExists, parseArrayParam } from './general.js';
 import { cleanupBitmaps } from './qemu-img.js';
 
@@ -102,7 +102,7 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
  *
  * @param {Object} args the command line arguments (domans, output, raw, prune)
  */
-const performBackup = async ({ domains, output, raw, groupBy, prune, connect, startDomain }) => {
+const performBackup = async ({ domains, output, raw, groupBy, prune, connect }) => {
   if (!domains) {
     throw createError('No domains specified', ERR_DOMAINS);
   }
@@ -126,7 +126,7 @@ const performBackup = async ({ domains, output, raw, groupBy, prune, connect, st
       await cleanupBitmaps(domain);
     }
 
-    await backup(domain, output, raw, groupBy, connect, startDomain);
+    await backup(domain, output, raw, groupBy, connect);
 
     if (await isPruningRequired(domain, groupBy, prune, output)) {
       logger.info(
@@ -283,9 +283,8 @@ const getBackupStartDate = (groupBy) => {
  * @param {boolean} raw whether to use raw format
  * @param {string} groupBy the grouping frequency
  * @param {string|undefined} connect the libvirt connection URI
- * @param {boolean} startDomain whether to start offline domains in paused state for backup
  */
-const backup = async (domain, outputDir, raw, groupBy, connect, startDomain) => {
+const backup = async (domain, outputDir, raw, groupBy, connect) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 
@@ -310,7 +309,10 @@ const backup = async (domain, outputDir, raw, groupBy, connect, startDomain) => 
     commandOpts.push('-U', connect);
   }
 
-  if (startDomain) {
+  // Auto-detect if domain is offline and use -S flag to enable checkpoint creation
+  const isRunning = await isDomainRunning(domain);
+  if (!isRunning) {
+    logger.info(`${domain} is offline, starting in paused state for checkpoint backup`);
     commandOpts.push('-S');
   }
 

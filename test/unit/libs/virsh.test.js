@@ -4,6 +4,7 @@ import {
   VIRSH,
   CHECKPOINT_REGEX,
   domainExists,
+  isDomainRunning,
   fetchAllDomains,
   findCheckpoints,
   cleanupCheckpoints,
@@ -92,6 +93,49 @@ describe('virsh.js', () => {
 
       expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(validDomains.length);
       expect(vmSnapModule.logger.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isDomainRunning', () => {
+    test('returns true when domain is running', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: 'running\n', stderr: '' });
+
+      const result = await isDomainRunning('test-domain');
+
+      expect(result).toBe(true);
+      expect(vmSnapModule.asyncExec).toHaveBeenCalledWith('virsh domstate test-domain');
+    });
+
+    test('returns false when domain is shut off', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: 'shut off\n', stderr: '' });
+
+      const result = await isDomainRunning('test-domain');
+
+      expect(result).toBe(false);
+    });
+
+    test('returns false when domain is paused', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: 'paused\n', stderr: '' });
+
+      const result = await isDomainRunning('test-domain');
+
+      expect(result).toBe(false);
+    });
+
+    test('returns false when domain does not exist', async () => {
+      vmSnapModule.asyncExec.mockRejectedValue(new Error('Domain not found'));
+
+      const result = await isDomainRunning('nonexistent-domain');
+
+      expect(result).toBe(false);
+    });
+
+    test('handles various running state formats', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: 'Running', stderr: '' });
+
+      const result = await isDomainRunning('test-domain');
+
+      expect(result).toBe(true);
     });
   });
 
