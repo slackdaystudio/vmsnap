@@ -378,18 +378,20 @@ describe('libnbdbackup.js', () => {
 
       expect(childProcessModule.spawn).toHaveBeenCalledWith(
         'virtnbdbackup',
-        [
+        expect.arrayContaining([
           '--noprogress',
           '-d',
           'test-domain',
           '-l',
           'auto',
           '-o',
-          `/backup${sep}test-domain${sep}vmsnap-backup-monthly-2024-03`
-        ],
+          `/backup${sep}test-domain${sep}vmsnap-backup-monthly-2024-03`,
+          '-f',
+          expect.stringMatching(/^\/var\/lib\/libvirt\/qemu\/virtnbdbackup\.\d+$/)
+        ]),
         {
-          uid: 0,
-          gid: 0,
+          uid: process.getuid(),
+          gid: process.getgid(),
           stdio: 'inherit'
         }
       );
@@ -735,15 +737,15 @@ describe('libnbdbackup.js', () => {
       generalModule.fileExists
         .mockResolvedValueOnce(true)   // Current folder exists
         .mockResolvedValueOnce(false); // Previous folder does not exist
-      
+
       mockSpawnChild.on.mockImplementation((event, callback) => {
         if (event === 'close') {
           setTimeout(() => callback(0), 10);
         }
       });
-      
+
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      
+
       await performBackup({
         domains: 'test-domain',
         output: '/backup',
@@ -754,6 +756,185 @@ describe('libnbdbackup.js', () => {
 
       expect(fsModule.rm).not.toHaveBeenCalled();
       spy.mockRestore();
+    });
+  });
+
+  describe('socketfile option', () => {
+    test('uses default socket path when socketfile not specified', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      const spawnCall = childProcessModule.spawn.mock.calls[0];
+      const args = spawnCall[1];
+      const socketIndex = args.indexOf('-f');
+      expect(socketIndex).toBeGreaterThan(-1);
+      expect(args[socketIndex + 1]).toMatch(/^\/var\/lib\/libvirt\/qemu\/virtnbdbackup\.\d+$/);
+    });
+
+    test('uses custom socket path when socketfile is specified', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false,
+        socketfile: '/custom/path/backup.sock'
+      });
+
+      const spawnCall = childProcessModule.spawn.mock.calls[0];
+      const args = spawnCall[1];
+      const socketIndex = args.indexOf('-f');
+      expect(socketIndex).toBeGreaterThan(-1);
+      expect(args[socketIndex + 1]).toBe('/custom/path/backup.sock');
+    });
+  });
+
+  describe('VM state detection', () => {
+    test('correctly detects running VM and omits -S flag', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      const spawnCall = childProcessModule.spawn.mock.calls[0];
+      const args = spawnCall[1];
+      expect(args).not.toContain('-S');
+      expect(vmSnapModule.logger.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('is offline')
+      );
+    });
+
+    test('correctly detects offline VM and adds -S flag', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(false);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      const spawnCall = childProcessModule.spawn.mock.calls[0];
+      const args = spawnCall[1];
+      expect(args).toContain('-S');
+      expect(vmSnapModule.logger.info).toHaveBeenCalledWith(
+        'test-domain is offline, starting in paused state for checkpoint backup'
+      );
+    });
+
+    test('handles multiple domains with mixed running states', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['running-vm', 'offline-vm']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning
+        .mockResolvedValueOnce(true)   // running-vm is running
+        .mockResolvedValueOnce(false); // offline-vm is offline
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'running-vm,offline-vm',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      // First call (running-vm) should NOT have -S
+      const firstCall = childProcessModule.spawn.mock.calls[0];
+      expect(firstCall[1]).not.toContain('-S');
+
+      // Second call (offline-vm) should have -S
+      const secondCall = childProcessModule.spawn.mock.calls[1];
+      expect(secondCall[1]).toContain('-S');
+    });
+  });
+
+  describe('process credentials', () => {
+    test('spawns child process with current user credentials', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        raw: false,
+        groupBy: 'month',
+        prune: false
+      });
+
+      expect(childProcessModule.spawn).toHaveBeenCalledWith(
+        'virtnbdbackup',
+        expect.any(Array),
+        expect.objectContaining({
+          uid: process.getuid(),
+          gid: process.getgid(),
+          stdio: 'inherit'
+        })
+      );
     });
   });
 });

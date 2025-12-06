@@ -102,7 +102,7 @@ const getBackupFolder = (groupBy = FREQUENCY_MONTHLY, current = true) => {
  *
  * @param {Object} args the command line arguments (domans, output, raw, prune)
  */
-const performBackup = async ({ domains, output, raw, groupBy, prune, connect }) => {
+const performBackup = async ({ domains, output, raw, groupBy, prune, connect, socketfile }) => {
   if (!domains) {
     throw createError('No domains specified', ERR_DOMAINS);
   }
@@ -126,7 +126,7 @@ const performBackup = async ({ domains, output, raw, groupBy, prune, connect }) 
       await cleanupBitmaps(domain);
     }
 
-    await backup(domain, output, raw, groupBy, connect);
+    await backup(domain, output, raw, groupBy, connect, socketfile);
 
     if (await isPruningRequired(domain, groupBy, prune, output)) {
       logger.info(
@@ -283,8 +283,9 @@ const getBackupStartDate = (groupBy) => {
  * @param {boolean} raw whether to use raw format
  * @param {string} groupBy the grouping frequency
  * @param {string|undefined} connect the libvirt connection URI
+ * @param {string|undefined} socketfile the socket file path for NBD server
  */
-const backup = async (domain, outputDir, raw, groupBy, connect) => {
+const backup = async (domain, outputDir, raw, groupBy, connect, socketfile) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 
@@ -309,6 +310,10 @@ const backup = async (domain, outputDir, raw, groupBy, connect) => {
     commandOpts.push('-U', connect);
   }
 
+  // Set socket file path - default to libvirt's qemu directory which the QEMU process can write to
+  const socketPath = socketfile || `/var/lib/libvirt/qemu/virtnbdbackup.${process.pid}`;
+  commandOpts.push('-f', socketPath);
+
   // Auto-detect if domain is offline and use -S flag to enable checkpoint creation
   const isRunning = await isDomainRunning(domain);
   if (!isRunning) {
@@ -317,8 +322,8 @@ const backup = async (domain, outputDir, raw, groupBy, connect) => {
   }
 
   const child = spawn(BACKUP, commandOpts, {
-    uid: 0,
-    gid: 0,
+    uid: process.getuid(),
+    gid: process.getgid(),
     stdio: 'inherit',
   });
 
