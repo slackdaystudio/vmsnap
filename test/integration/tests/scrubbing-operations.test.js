@@ -101,14 +101,9 @@ describe('Scrubbing Operations', () => {
           expect(result.exitCode).toBe(0);
         }
 
-        // Note: Offline VMs don't create checkpoints - they use copy mode
+        // Offline VMs are started in paused state (-S) so checkpoints are created
         const checkpoints = await getCheckpoints(testVM.name);
-        const state = await testVM.getState();
-        if (state === 'shut off') {
-          expect(checkpoints.length).toBe(0);
-        } else {
-          expect(checkpoints.length).toBe(2);
-        }
+        expect(checkpoints.length).toBe(2);
       },
       240000
     );
@@ -118,11 +113,7 @@ describe('Scrubbing Operations', () => {
       async () => {
         const checkpointsBefore = await getCheckpoints(testVM.name);
 
-        // Skip test if no checkpoints (offline VMs don't create them)
-        if (checkpointsBefore.length === 0) {
-          console.log('Skipping: No checkpoints created (VM is offline)');
-          return;
-        }
+        expect(checkpointsBefore.length).toBeGreaterThan(0);
 
         expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
 
@@ -174,21 +165,17 @@ describe('Scrubbing Operations', () => {
       async () => {
         // Create backups to generate checkpoints
         for (let i = 0; i < 2; i++) {
-          await execVMSnap([
+          const backupResult = await execVMSnap([
             `--domains=${testVM.name}`,
             `--output=${TEST_CONFIG.backupDir}`,
             '--backup',
           ]);
+          expect(backupResult.exitCode).toBe(0);
         }
 
-        // Check checkpoints (offline VMs don't create them)
         const checkpointsBefore = await getCheckpoints(testVM.name);
 
-        // Skip test if no checkpoints (offline VMs don't create them)
-        if (checkpointsBefore.length === 0) {
-          console.log('Skipping: No checkpoints created (VM is offline)');
-          return;
-        }
+        expect(checkpointsBefore.length).toBeGreaterThan(0);
 
         expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
 
@@ -236,11 +223,12 @@ describe('Scrubbing Operations', () => {
       async () => {
         // Create backups to generate bitmaps
         for (let i = 0; i < 2; i++) {
-          await execVMSnap([
+          const backupResult = await execVMSnap([
             `--domains=${testVM.name}`,
             `--output=${TEST_CONFIG.backupDir}`,
             '--backup',
           ]);
+          expect(backupResult.exitCode).toBe(0);
         }
 
         // Get bitmaps (they're on the disk image)
@@ -291,21 +279,17 @@ describe('Scrubbing Operations', () => {
       async () => {
         // Create backups to generate checkpoints and bitmaps
         for (let i = 0; i < 2; i++) {
-          await execVMSnap([
+          const backupResult = await execVMSnap([
             `--domains=${testVM.name}`,
             `--output=${TEST_CONFIG.backupDir}`,
             '--backup',
           ]);
+          expect(backupResult.exitCode).toBe(0);
         }
 
-        // Check checkpoints (offline VMs don't create them)
         const checkpointsBefore = await getCheckpoints(testVM.name);
 
-        // Skip test if no checkpoints (offline VMs don't create them)
-        if (checkpointsBefore.length === 0) {
-          console.log('Skipping: No checkpoints created (VM is offline)');
-          return;
-        }
+        expect(checkpointsBefore.length).toBeGreaterThan(0);
 
         expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
 
@@ -356,22 +340,19 @@ describe('Scrubbing Operations', () => {
       async () => {
         // Create backups for both VMs
         for (const vm of [testVM1, testVM2]) {
-          await execVMSnap([
+          const backupResult = await execVMSnap([
             `--domains=${vm.name}`,
             `--output=${TEST_CONFIG.backupDir}`,
             '--backup',
           ]);
+          expect(backupResult.exitCode).toBe(0);
         }
 
-        // Check checkpoints (offline VMs don't create them)
         const checkpoints1Before = await getCheckpoints(testVM1.name);
         const checkpoints2Before = await getCheckpoints(testVM2.name);
 
-        // Skip test if no checkpoints (offline VMs don't create them)
-        if (checkpoints1Before.length === 0 && checkpoints2Before.length === 0) {
-          console.log('Skipping: No checkpoints created (VMs are offline)');
-          return;
-        }
+        expect(checkpoints1Before.length).toBeGreaterThan(0);
+        expect(checkpoints2Before.length).toBeGreaterThan(0);
 
         // Scrub checkpoints from both
         const result = await execVMSnap([

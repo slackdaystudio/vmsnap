@@ -34,6 +34,30 @@ Getting these installed is out of scope for this doc.
 The app will let you know if you are missing any required programs when you 
 start running commands with it.
 
+### AppArmor (Ubuntu, Debian and derivatives)
+
+During a backup, QEMU opens a UNIX socket for virtnbdbackup's NBD server. On
+hosts with AppArmor enabled, libvirt's QEMU profile blocks this by default and
+every backup fails with:
+
+```
+Failed to bind socket to /var/tmp/virtnbdbackup.<pid>: Permission denied
+```
+
+Allow the socket paths virtnbdbackup uses, as recommended by the
+[virtnbdbackup docs](https://github.com/abbbi/virtnbdbackup#apparmor):
+
+```sh
+printf '%s\n' '/var/tmp/virtnbdbackup.* rw,' '/var/tmp/backup.* rw,' \
+  | sudo tee -a /etc/apparmor.d/local/abstractions/libvirt-qemu
+sudo systemctl reload apparmor
+```
+
+If you pass `--socketfile`, make sure that path is allowed by AppArmor too.
+
+> **Note:** VMSnap exits with code `9` if virtnbdbackup fails for any domain,
+> so failed backups are visible to cron jobs and other automation.
+
 ## Installation
 
 To install VMSnap, follow these steps:
@@ -88,6 +112,7 @@ The following CLI switches are available when invoking VMSnap.
 | raw            | -      | ✅     | -      | boolean | Enables raw disk handling                                                    |
 | groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, bi-annual or year)  | 
 | prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*                         |
+| socketfile     | -      | ✅     | -      | string  | NBD socket path (default: virtnbdbackup's `/var/tmp/virtnbdbackup.<pid>`)     |
 | pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                              |
 | checkpointName | -      | -      | ✅     | string  | The name of the checkpoint to delete (no effect when scrubType=*)            |
 | scrubType      | -      | -      | ✅     | string  | The type of item to scrub (checkpoint, bitmap, both, or * for ALL)           |
@@ -320,13 +345,13 @@ Integration tests can run in CI using a self-hosted runner with KVM support:
        runs-on: self-hosted  # Change from ubuntu-latest
    ```
 
-#### Why Integration Tests Skip on GitHub-Hosted Runners
+#### Integration Tests on GitHub-Hosted Runners
 
-Standard GitHub-hosted runners (`ubuntu-latest`) don't expose `/dev/kvm` because nested virtualization is disabled. The integration test workflow automatically detects this and:
-- Skips integration tests with a warning
-- Still runs all unit tests successfully
-
-This ensures CI doesn't fail while allowing full integration testing on capable environments.
+GitHub-hosted Linux runners (`ubuntu-latest`) expose `/dev/kvm`, so the
+integration tests run on every push and pull request. The workflow installs
+libvirt and virtnbdbackup and adds the [AppArmor rules](#apparmor-ubuntu-debian-and-derivatives)
+virtnbdbackup needs. If a runner doesn't expose `/dev/kvm`, the workflow skips
+the integration tests with a warning and still runs the unit tests.
 
 ### Code Quality
 ```sh

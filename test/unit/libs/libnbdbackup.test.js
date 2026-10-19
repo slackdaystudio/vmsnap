@@ -27,6 +27,7 @@ vi.mock('fs/promises', () => ({
 }));
 
 vi.mock('../../../vmsnap.js', () => ({
+  ERR_BACKUP: 9,
   ERR_DOMAINS: 1,
   ERR_OUTPUT_DIR: 2,
   logger: {
@@ -385,9 +386,7 @@ describe('libnbdbackup.js', () => {
           '-l',
           'auto',
           '-o',
-          `/backup${sep}test-domain${sep}vmsnap-backup-monthly-2024-03`,
-          '-f',
-          expect.stringMatching(/^\/var\/lib\/libvirt\/qemu\/virtnbdbackup\.\d+$/)
+          `/backup${sep}test-domain${sep}vmsnap-backup-monthly-2024-03`
         ]),
         {
           uid: process.getuid(),
@@ -487,7 +486,7 @@ describe('libnbdbackup.js', () => {
       expect(spawnCall[1]).not.toContain('-S');
     });
 
-    test('logs error when backup fails', async () => {
+    test('logs error and rejects with ERR_BACKUP when backup fails', async () => {
       generalModule.fileExists.mockResolvedValue(true);
       
       // Mock backup failure (exit code 1)
@@ -497,17 +496,81 @@ describe('libnbdbackup.js', () => {
         }
       });
 
-      await performBackup({
-        domains: 'test-domain',
-        output: '/backup',
-        raw: false,
-        groupBy: 'month',
-        prune: false
+      await expect(
+        performBackup({
+          domains: 'test-domain',
+          output: '/backup',
+          raw: false,
+          groupBy: 'month',
+          prune: false
+        })
+      ).rejects.toMatchObject({
+        message: 'Backup failed for: test-domain',
+        code: 9
       });
 
       expect(vmSnapModule.logger.error).toHaveBeenCalledWith(
         'Backup for test-domain failed with code 1'
       );
+    });
+
+    test('rejects with ERR_BACKUP when backup process fails to start', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'error') {
+          setTimeout(() => callback(new Error('spawn virtnbdbackup ENOENT')), 10);
+        }
+      });
+
+      await expect(
+        performBackup({
+          domains: 'test-domain',
+          output: '/backup',
+          raw: false,
+          groupBy: 'month',
+          prune: false
+        })
+      ).rejects.toMatchObject({ code: 9 });
+
+      expect(vmSnapModule.logger.error).toHaveBeenCalledWith(
+        'Backup for test-domain failed to start: spawn virtnbdbackup ENOENT'
+      );
+    });
+
+    test('continues with remaining domains and skips pruning for failed ones', async () => {
+      vi.setSystemTime(new Date('2024-03-20T10:00:00Z')); // Past middle of month
+      generalModule.parseArrayParam.mockResolvedValue(['bad-domain', 'good-domain']);
+      generalModule.fileExists.mockResolvedValue(true);
+
+      // First backup fails, second succeeds
+      let closeCount = 0;
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          const code = closeCount++ === 0 ? 1 : 0;
+          setTimeout(() => callback(code), 10);
+        }
+      });
+
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await expect(
+        performBackup({
+          domains: 'bad-domain,good-domain',
+          output: '/backup',
+          raw: false,
+          groupBy: 'month',
+          prune: 'month'
+        })
+      ).rejects.toMatchObject({
+        message: 'Backup failed for: bad-domain',
+        code: 9
+      });
+
+      expect(childProcessModule.spawn).toHaveBeenCalledTimes(2);
+      expect(fsModule.rm).toHaveBeenCalledTimes(1);
+      expect(fsModule.rm.mock.calls[0][0]).toContain(`${sep}good-domain${sep}`);
+      spy.mockRestore();
     });
 
     test('handles stdout data from backup process', async () => {
@@ -760,7 +823,7 @@ describe('libnbdbackup.js', () => {
   });
 
   describe('socketfile option', () => {
-    test('uses default socket path when socketfile not specified', async () => {
+    test('leaves socket path to virtnbdbackup when socketfile not specified', async () => {
       generalModule.fileExists.mockResolvedValue(true);
       generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
       virshModule.domainExists.mockResolvedValue(true);
@@ -782,9 +845,7 @@ describe('libnbdbackup.js', () => {
 
       const spawnCall = childProcessModule.spawn.mock.calls[0];
       const args = spawnCall[1];
-      const socketIndex = args.indexOf('-f');
-      expect(socketIndex).toBeGreaterThan(-1);
-      expect(args[socketIndex + 1]).toMatch(/^\/var\/lib\/libvirt\/qemu\/virtnbdbackup\.\d+$/);
+      expect(args).not.toContain('-f');
     });
 
     test('uses custom socket path when socketfile is specified', async () => {

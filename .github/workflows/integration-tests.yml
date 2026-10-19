@@ -62,6 +62,17 @@ jobs:
           # Verify libvirt connection
           sudo virsh version
 
+      - name: Allow QEMU to create virtnbdbackup NBD sockets (AppArmor)
+        if: steps.kvm-check.outputs.kvm_available == 'true'
+        run: |
+          # QEMU's AppArmor profile blocks the NBD socket virtnbdbackup asks it
+          # to create, failing every backup with "Permission denied". These are
+          # the rules recommended by the virtnbdbackup README.
+          sudo mkdir -p /etc/apparmor.d/local/abstractions
+          printf '%s\n' '/var/tmp/virtnbdbackup.* rw,' '/var/tmp/backup.* rw,' \
+            | sudo tee -a /etc/apparmor.d/local/abstractions/libvirt-qemu
+          sudo systemctl reload apparmor || true
+
       - name: Install virtnbdbackup
         if: steps.kvm-check.outputs.kvm_available == 'true'
         run: |

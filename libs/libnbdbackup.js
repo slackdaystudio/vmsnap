@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 import dayOfYear from 'dayjs/plugin/dayOfYear.js';
-import { logger, ERR_DOMAINS, ERR_OUTPUT_DIR } from '../vmsnap.js';
+import { logger, ERR_BACKUP, ERR_DOMAINS, ERR_OUTPUT_DIR } from '../vmsnap.js';
 import { cleanupCheckpoints, domainExists, isDomainRunning, fetchAllDomains } from './virsh.js';
 import { createError, fileExists, parseArrayParam } from './general.js';
 import { cleanupBitmaps } from './qemu-img.js';
@@ -117,6 +117,8 @@ const performBackup = async ({ domains, output, raw, groupBy, prune, connect, so
     throw createError(`No matching domains found for: ${domains}`, ERR_DOMAINS);
   }
 
+  const failedDomains = [];
+
   for (const domain of parsedDomains) {
     if (await isCleanupRequired(domain, groupBy, output)) {
       logger.info('Creating a new backup directory, running bitmap cleanup');
@@ -126,7 +128,13 @@ const performBackup = async ({ domains, output, raw, groupBy, prune, connect, so
       await cleanupBitmaps(domain);
     }
 
-    await backup(domain, output, raw, groupBy, connect, socketfile);
+    // Keep backing up the remaining domains, but never prune the old backups
+    // of a domain whose current backup failed.
+    if (!(await backup(domain, output, raw, groupBy, connect, socketfile))) {
+      failedDomains.push(domain);
+
+      continue;
+    }
 
     if (await isPruningRequired(domain, groupBy, prune, output)) {
       logger.info(
@@ -136,6 +144,13 @@ const performBackup = async ({ domains, output, raw, groupBy, prune, connect, so
       // Delete last months backups
       await pruneLastMonthsBackups(domain, groupBy, output);
     }
+  }
+
+  if (failedDomains.length > 0) {
+    throw createError(
+      `Backup failed for: ${failedDomains.join(', ')}`,
+      ERR_BACKUP,
+    );
   }
 };
 
@@ -284,12 +299,13 @@ const getBackupStartDate = (groupBy) => {
  * @param {string} groupBy the grouping frequency
  * @param {string|undefined} connect the libvirt connection URI
  * @param {string|undefined} socketfile the socket file path for NBD server
+ * @returns {Promise<boolean>} false if virtnbdbackup failed, true otherwise
  */
 const backup = async (domain, outputDir, raw, groupBy, connect, socketfile) => {
   if (!(await domainExists(domain))) {
     logger.warn(`${domain} does not exist`);
 
-    return;
+    return true;
   }
 
   const commandOpts = [
@@ -310,9 +326,13 @@ const backup = async (domain, outputDir, raw, groupBy, connect, socketfile) => {
     commandOpts.push('-U', connect);
   }
 
-  // Set socket file path - default to libvirt's qemu directory which the QEMU process can write to
-  const socketPath = socketfile || `/var/lib/libvirt/qemu/virtnbdbackup.${process.pid}`;
-  commandOpts.push('-f', socketPath);
+  // Only override the NBD socket path when asked to.  QEMU creates this socket,
+  // so on AppArmor hosts it must be allowed by the libvirt-qemu profile.  The
+  // virtnbdbackup default (/var/tmp/virtnbdbackup.*) is the path its docs
+  // provide an AppArmor rule for.
+  if (socketfile) {
+    commandOpts.push('-f', socketfile);
+  }
 
   // Auto-detect if domain is offline and use -S flag to enable checkpoint creation
   const isRunning = await isDomainRunning(domain);
@@ -344,13 +364,23 @@ const backup = async (domain, outputDir, raw, groupBy, connect, socketfile) => {
   }
 
   // Wait for the backup to finish
-  await new Promise((resolve) => {
+  return new Promise((resolve) => {
+    child.on('error', (err) => {
+      logger.error(`Backup for ${domain} failed to start: ${err.message}`);
+
+      resolve(false);
+    });
+
     child.on('close', (code) => {
       if (code !== 0) {
         logger.error(`Backup for ${domain} failed with code ${code}`);
+
+        resolve(false);
+
+        return;
       }
 
-      resolve();
+      resolve(true);
     });
   });
 };

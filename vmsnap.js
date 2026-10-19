@@ -66,6 +66,9 @@ export const ERR_TOO_MANY_COMMANDS = 7;
 // Invalid scrub type was specified.
 export const ERR_INVALID_SCRUB_TYPE = 8;
 
+// Backup error, virtnbdbackup failed for one or more domains.
+export const ERR_BACKUP = 9;
+
 // A spinnner for long running tasks
 export const spinner = yoctoSpinner();
 

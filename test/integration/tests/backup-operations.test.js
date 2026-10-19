@@ -128,21 +128,12 @@ describe('Basic Backup Operations', () => {
         // Get checkpoints after previous backup
         const checkpoints = await getCheckpoints(testVM.name);
 
-        // Note: Offline VMs (shut off) don't create checkpoints with virtnbdbackup
-        // The backup uses "copy" mode instead of incremental backup with checkpoints
-        // This test verifies that no checkpoints are created for offline VMs
-        // (which is the expected behavior)
-        const state = await testVM.getState();
-        if (state === 'shut off') {
-          // Offline VMs don't create checkpoints
-          expect(checkpoints.length).toBe(0);
-        } else {
-          // Running VMs should have checkpoints
-          expect(checkpoints.length).toBeGreaterThanOrEqual(1);
-          expect(checkpoints.some((cp) => cp.includes('virtnbdbackup'))).toBe(
-            true
-          );
-        }
+        // Offline VMs are started in paused state (-S), so every backup
+        // creates a checkpoint regardless of the VM's power state
+        expect(checkpoints.length).toBeGreaterThanOrEqual(1);
+        expect(checkpoints.some((cp) => cp.includes('virtnbdbackup'))).toBe(
+          true
+        );
       },
       30000
     );
