@@ -115,8 +115,6 @@ describe('Scrubbing Operations', () => {
 
         expect(checkpointsBefore.length).toBeGreaterThan(0);
 
-        expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
-
         // Get the first checkpoint name
         const checkpointToDelete = checkpointsBefore[0];
 
@@ -176,8 +174,6 @@ describe('Scrubbing Operations', () => {
         const checkpointsBefore = await getCheckpoints(testVM.name);
 
         expect(checkpointsBefore.length).toBeGreaterThan(0);
-
-        expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
 
         // Scrub all checkpoints
         const result = await execVMSnap([
@@ -290,8 +286,6 @@ describe('Scrubbing Operations', () => {
         const checkpointsBefore = await getCheckpoints(testVM.name);
 
         expect(checkpointsBefore.length).toBeGreaterThan(0);
-
-        expect(checkpointsBefore.length).toBeGreaterThanOrEqual(1);
 
         // Scrub everything
         const result = await execVMSnap([

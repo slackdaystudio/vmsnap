@@ -243,6 +243,10 @@ describe('Incremental Backup Operations', () => {
     test(
       'handles disk with no changes efficiently',
       async () => {
+        // Put real data on the disk so the full backup is not just metadata,
+        // otherwise there is nothing for the incremental to be smaller than
+        await testVM.writeDiskData(0, '64M');
+
         // First backup (full)
         const result1 = await execVMSnap([
           `--domains=${testVM.name}`,
@@ -259,6 +263,7 @@ describe('Incremental Backup Operations', () => {
           TEST_CONFIG.backupDir,
           testVM.name
         );
+        expect(firstSize).toBeGreaterThan(32 * 1024 * 1024);
 
         // Second backup with no changes
         const result2 = await execVMSnap([

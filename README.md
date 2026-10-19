@@ -239,6 +239,13 @@ bitmap if it find it.
 vmsnap --domains=vm1 --scrub --scrubType=bitmap --checkpointName=virtnbdbackup.17
 ```
 
+Use `--checkpointName='*'` to scrub every VMSnap checkpoint (or bitmap) of the
+given `scrubType`:
+
+```sh
+vmsnap --domains=vm1 --scrub --scrubType=checkpoint --checkpointName='*'
+```
+
 To scrub a domain of **ALL** checkpoints and bitmaps
 
 ```sh

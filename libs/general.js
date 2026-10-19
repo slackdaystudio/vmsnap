@@ -189,6 +189,12 @@ const scrubCheckpointsAndBitmaps = async ({
 
   logger.info('Scrubbing checkpoints and bitmaps');
 
+  // A checkpoint name of "*" means every VMSnap checkpoint, the same as not
+  // naming one.
+  if (checkpointName === '*') {
+    checkpointName = undefined;
+  }
+
   let scrubbed = false;
 
   const parsedDomains = await parseArrayParam(domains, fetchAllDomains);

@@ -234,6 +234,22 @@ describe('general.js', () => {
       expect(qemuImgModule.cleanupBitmaps).not.toHaveBeenCalled();
     });
 
+    test('treats checkpointName "*" as all checkpoints and bitmaps', async () => {
+      virshModule.fetchAllDomains.mockResolvedValue(['vm1']);
+      virshModule.cleanupCheckpoints.mockResolvedValue();
+      qemuImgModule.cleanupBitmaps.mockResolvedValue();
+
+      const result = await scrubCheckpointsAndBitmaps({
+        domains: 'vm1',
+        scrubType: 'both',
+        checkpointName: '*'
+      });
+
+      expect(result).toBe(true);
+      expect(virshModule.cleanupCheckpoints).toHaveBeenCalledWith('vm1', undefined);
+      expect(qemuImgModule.cleanupBitmaps).toHaveBeenCalledWith('vm1', undefined);
+    });
+
     test('scrubs bitmaps only', async () => {
       virshModule.fetchAllDomains.mockResolvedValue(['vm1']);
       qemuImgModule.cleanupBitmaps.mockResolvedValue();

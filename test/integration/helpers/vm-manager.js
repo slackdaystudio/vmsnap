@@ -164,6 +164,15 @@ export class TestVM {
       return [];
     }
   }
+
+  /**
+   * Write a block of patterned data to this VM's disk (VM must be shut off)
+   */
+  async writeDiskData(offset, size, pattern = '0xab') {
+    await execAsync(
+      `qemu-io -f qcow2 -c 'write -P ${pattern} ${offset} ${size}' ${this.diskPath}`
+    );
+  }
 }
 
 /**
