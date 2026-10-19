@@ -159,13 +159,15 @@ describe('Backup Chain Management', () => {
         expect(
           (await runBackup(testVM, TEST_CONFIG.backupDir, ['--groupBy=year'])).exitCode
         ).toBe(0);
-        expect((await runBackup(testVM, TEST_CONFIG.backupDir)).exitCode).toBe(0);
+        expect(
+          (await runBackup(testVM, TEST_CONFIG.backupDir, ['--groupBy=year'])).exitCode
+        ).toBe(0);
 
         const checkpoints = await getCheckpoints(testVM.name);
         expect(checkpoints).toEqual(['virtnbdbackup.0', 'virtnbdbackup.1']);
 
         // No --groupBy means monthly, which doesn't match the yearly chain
-        const result = await runBackup(testVM, TEST_CONFIG.backupDir, ['--groupBy=month']);
+        const result = await runBackup(testVM, TEST_CONFIG.backupDir);
         expect(result.exitCode).toBe(ERR_GROUPBY);
         expect(await getCheckpoints(testVM.name)).toEqual(checkpoints);
       },
