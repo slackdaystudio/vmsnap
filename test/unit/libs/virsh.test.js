@@ -5,10 +5,13 @@ import {
   CHECKPOINT_REGEX,
   domainExists,
   isDomainRunning,
+  isDomainActive,
   fetchAllDomains,
   findCheckpoints,
   cleanupCheckpoints,
-  fetchAllDisks
+  fetchAllDisks,
+  fetchBlockNodes,
+  removeBitmapFromRunningDomain
 } from '../../../libs/virsh.js';
 
 // Mock the vmsnap module
@@ -93,6 +96,30 @@ describe('virsh.js', () => {
 
       expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(validDomains.length);
       expect(vmSnapModule.logger.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isDomainActive', () => {
+    test.each(['running', 'paused', 'in shutdown', 'pmsuspended'])(
+      'returns true when domain is %s',
+      async (state) => {
+        vmSnapModule.asyncExec.mockResolvedValue({ stdout: `${state}\n`, stderr: '' });
+
+        expect(await isDomainActive('test-domain')).toBe(true);
+        expect(vmSnapModule.asyncExec).toHaveBeenCalledWith('virsh domstate test-domain');
+      }
+    );
+
+    test.each(['shut off', 'crashed'])('returns false when domain is %s', async (state) => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: `${state}\n`, stderr: '' });
+
+      expect(await isDomainActive('test-domain')).toBe(false);
+    });
+
+    test('returns false when domain does not exist', async () => {
+      vmSnapModule.asyncExec.mockRejectedValue(new Error('Domain not found'));
+
+      expect(await isDomainActive('nonexistent-domain')).toBe(false);
     });
   });
 
@@ -233,10 +260,10 @@ describe('virsh.js', () => {
 
       expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(3); // 1 list + 2 deletes
       expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
-        'virsh checkpoint-delete test-domain virtnbdbackup.123 --metadata'
+        'virsh checkpoint-delete test-domain virtnbdbackup.123'
       );
       expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
-        'virsh checkpoint-delete test-domain virtnbdbackup.456 --metadata'
+        'virsh checkpoint-delete test-domain virtnbdbackup.456'
       );
       expect(vmSnapModule.logger.info).toHaveBeenCalledTimes(2);
     });
@@ -255,7 +282,7 @@ describe('virsh.js', () => {
 
       expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(2); // 1 list + 1 delete
       expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
-        'virsh checkpoint-delete test-domain virtnbdbackup.123 --metadata'
+        'virsh checkpoint-delete test-domain virtnbdbackup.123'
       );
       expect(vmSnapModule.logger.info).toHaveBeenCalledWith(
         'Removing checkpoint virtnbdbackup.123 from test-domain'
@@ -284,6 +311,27 @@ describe('virsh.js', () => {
       expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(1); // Only list call
     });
 
+    test('falls back to removing metadata only when full deletion fails', async () => {
+      vmSnapModule.asyncExec
+        .mockResolvedValueOnce({ stdout: 'virtnbdbackup.123', stderr: '' })
+        .mockRejectedValueOnce(new Error('bitmap not found'))
+        .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+      await cleanupCheckpoints('test-domain');
+
+      expect(vmSnapModule.asyncExec).toHaveBeenNthCalledWith(
+        2,
+        'virsh checkpoint-delete test-domain virtnbdbackup.123'
+      );
+      expect(vmSnapModule.asyncExec).toHaveBeenNthCalledWith(
+        3,
+        'virsh checkpoint-delete test-domain virtnbdbackup.123 --metadata'
+      );
+      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/removing metadata only.*bitmap not found/)
+      );
+    });
+
     test('throws error when checkpoint deletion fails', async () => {
       const mockCheckpoints = ['virtnbdbackup.123'];
       
@@ -291,6 +339,10 @@ describe('virsh.js', () => {
         .mockResolvedValueOnce({ 
           stdout: mockCheckpoints.join(EOL), 
           stderr: '' 
+        })
+        .mockResolvedValueOnce({ 
+          stdout: '', 
+          stderr: 'Failed to delete checkpoint' 
         })
         .mockResolvedValueOnce({ 
           stdout: '', 
@@ -395,6 +447,66 @@ describe('virsh.js', () => {
       });
 
       await expect(fetchAllDisks('nonexistent-domain')).rejects.toThrow('Domain not found');
+    });
+  });
+
+  describe('fetchBlockNodes', () => {
+    test('maps disk image paths to QEMU block node names', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({
+        stdout: JSON.stringify({
+          return: [
+            {
+              device: '',
+              inserted: {
+                file: '/var/lib/libvirt/images/vm1.qcow2',
+                'node-name': 'libvirt-1-format',
+                'dirty-bitmaps': [{ name: 'virtnbdbackup.0' }]
+              }
+            },
+            { device: 'ide0-1-0' }
+          ]
+        }),
+        stderr: ''
+      });
+
+      const nodes = await fetchBlockNodes('test-domain');
+
+      expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
+        `virsh qemu-monitor-command test-domain '{"execute":"query-block"}'`
+      );
+      expect(nodes).toEqual(
+        new Map([
+          [
+            '/var/lib/libvirt/images/vm1.qcow2',
+            { node: 'libvirt-1-format', bitmaps: [{ name: 'virtnbdbackup.0' }] }
+          ]
+        ])
+      );
+    });
+
+    test('throws when the monitor command reports an error', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({ stdout: '', stderr: 'error' });
+
+      await expect(fetchBlockNodes('test-domain')).rejects.toThrow('error');
+    });
+  });
+
+  describe('removeBitmapFromRunningDomain', () => {
+    test('removes the bitmap through QMP', async () => {
+      vmSnapModule.asyncExec.mockResolvedValue({
+        stdout: '{"return":{}}',
+        stderr: ''
+      });
+
+      await removeBitmapFromRunningDomain(
+        'test-domain',
+        'libvirt-1-format',
+        'virtnbdbackup.0'
+      );
+
+      expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
+        `virsh qemu-monitor-command test-domain '{"execute":"block-dirty-bitmap-remove","arguments":{"node":"libvirt-1-format","name":"virtnbdbackup.0"}}'`
+      );
     });
   });
 });

@@ -23,11 +23,13 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('fs/promises', () => ({
+  readdir: vi.fn(),
   rm: vi.fn()
 }));
 
 vi.mock('../../../vmsnap.js', () => ({
   ERR_BACKUP: 9,
+  ERR_GROUPBY: 10,
   ERR_DOMAINS: 1,
   ERR_OUTPUT_DIR: 2,
   logger: {
@@ -89,6 +91,7 @@ describe('libnbdbackup.js', () => {
     };
     
     childProcessModule.spawn.mockReturnValue(mockSpawnChild);
+    fsModule.readdir.mockResolvedValue([]);
   });
 
   describe('constants', () => {
@@ -768,31 +771,51 @@ describe('libnbdbackup.js', () => {
       });
     });
 
-    test('skips pruning for invalid groupBy', async () => {
+    test('rejects an invalid groupBy before backing up', async () => {
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+
+      await expect(
+        performBackup({
+          domains: 'test-domain',
+          output: '/backup',
+          raw: false,
+          groupBy: 'invalid',
+          prune: 'invalid'
+        })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('Invalid groupBy: invalid'),
+        code: 10
+      });
+
+      expect(childProcessModule.spawn).not.toHaveBeenCalled();
+      expect(virshModule.cleanupCheckpoints).not.toHaveBeenCalled();
+    });
+
+    test('does not prune bi-annual backups early in the second half', async () => {
+      // 2024-07-20 is only 22 days into the second half (day 180 onwards)
+      vi.setSystemTime(new Date('2024-07-20T10:00:00Z'));
+
       generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
       generalModule.fileExists.mockResolvedValue(true);
-      
+
       mockSpawnChild.on.mockImplementation((event, callback) => {
         if (event === 'close') {
           setTimeout(() => callback(0), 10);
         }
       });
-      
-      const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      
+
       await performBackup({
         domains: 'test-domain',
         output: '/backup',
         raw: false,
-        groupBy: 'invalid',
-        prune: 'invalid'
+        groupBy: 'bi-annual',
+        prune: 'bi-annual'
       });
 
-      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
-        'Invalid groupBy: invalid.  Pruning disabled'
+      expect(vmSnapModule.logger.info).toHaveBeenCalledWith(
+        'Days since the start of the bi-annual: 22'
       );
       expect(fsModule.rm).not.toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     test('skips pruning when previous backup folder does not exist', async () => {
@@ -819,6 +842,175 @@ describe('libnbdbackup.js', () => {
 
       expect(fsModule.rm).not.toHaveBeenCalled();
       spy.mockRestore();
+    });
+  });
+
+  describe('groupBy guard', () => {
+    const closeWith = (code) => {
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(code), 10);
+        }
+      });
+    };
+
+    beforeEach(() => {
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(true);
+      generalModule.fileExists.mockResolvedValue(false); // New period folder
+      closeWith(0);
+    });
+
+    test('refuses to start a chain when backups use a different groupBy', async () => {
+      fsModule.readdir.mockResolvedValue(['vmsnap-backup-bi-annually-2024-p1']);
+
+      await expect(
+        performBackup({ domains: 'test-domain', output: '/backup', groupBy: 'month' })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('test-domain (bi-annual)'),
+        code: 10
+      });
+
+      expect(virshModule.cleanupCheckpoints).not.toHaveBeenCalled();
+      expect(childProcessModule.spawn).not.toHaveBeenCalled();
+    });
+
+    test('defaults to monthly when checking an omitted groupBy', async () => {
+      fsModule.readdir.mockResolvedValue(['vmsnap-backup-bi-annually-2024-p1']);
+
+      await expect(
+        performBackup({ domains: 'test-domain', output: '/backup' })
+      ).rejects.toMatchObject({ code: 10 });
+    });
+
+    test('starts the new chain anyway with force', async () => {
+      fsModule.readdir.mockResolvedValue(['vmsnap-backup-bi-annually-2024-p1']);
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        groupBy: 'month',
+        force: true
+      });
+
+      expect(virshModule.cleanupCheckpoints).toHaveBeenCalledWith('test-domain');
+      expect(childProcessModule.spawn).toHaveBeenCalled();
+    });
+
+    test('allows a new period when earlier backups use the same groupBy', async () => {
+      fsModule.readdir.mockResolvedValue([
+        'vmsnap-backup-monthly-2024-02',
+        'vmsnap-copy-yearly-2023'
+      ]);
+
+      await performBackup({ domains: 'test-domain', output: '/backup', groupBy: 'month' });
+
+      expect(virshModule.cleanupCheckpoints).toHaveBeenCalledWith('test-domain');
+      expect(childProcessModule.spawn).toHaveBeenCalled();
+    });
+
+    test('does not check when the period folder already exists', async () => {
+      generalModule.fileExists.mockResolvedValue(true);
+      fsModule.readdir.mockResolvedValue(['vmsnap-backup-bi-annually-2024-p1']);
+
+      await performBackup({ domains: 'test-domain', output: '/backup', groupBy: 'month' });
+
+      expect(childProcessModule.spawn).toHaveBeenCalled();
+    });
+  });
+
+  describe('copy mode', () => {
+    beforeEach(() => {
+      generalModule.parseArrayParam.mockResolvedValue(['test-domain']);
+      virshModule.domainExists.mockResolvedValue(true);
+      virshModule.isDomainRunning.mockResolvedValue(false); // Offline VM
+      generalModule.fileExists.mockResolvedValue(false);
+      // Existing bi-annual chain must not block or be touched by a copy
+      fsModule.readdir.mockImplementation(async (dir) =>
+        dir === '/backup/test-domain' ? ['vmsnap-backup-bi-annually-2024-p1'] : []
+      );
+      mockSpawnChild.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          setTimeout(() => callback(0), 10);
+        }
+      });
+    });
+
+    test('takes a copy without touching checkpoints', async () => {
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        groupBy: 'quarter',
+        copy: true
+      });
+
+      const args = childProcessModule.spawn.mock.calls[0][1];
+      expect(args).toEqual(
+        expect.arrayContaining([
+          '-l',
+          'copy',
+          '-o',
+          `/backup${sep}test-domain${sep}vmsnap-copy-quarterly-2024-Q1`
+        ])
+      );
+      // Copies read offline disks directly, no need to start the VM
+      expect(args).not.toContain('-S');
+      expect(virshModule.cleanupCheckpoints).not.toHaveBeenCalled();
+      expect(qemuImgModule.cleanupBitmaps).not.toHaveBeenCalled();
+    });
+
+    test('skips when a copy already exists for the period', async () => {
+      fsModule.readdir.mockImplementation(async (dir) =>
+        dir.endsWith('vmsnap-copy-quarterly-2024-Q1')
+          ? ['vda.copy.data', 'backup.copy.log']
+          : []
+      );
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        groupBy: 'quarter',
+        copy: true
+      });
+
+      expect(childProcessModule.spawn).not.toHaveBeenCalled();
+      expect(vmSnapModule.logger.info).toHaveBeenCalledWith(
+        'A copy of test-domain already exists for this period, skipping'
+      );
+    });
+
+    test('retries a period whose copy failed and left only logs', async () => {
+      fsModule.readdir.mockImplementation(async (dir) =>
+        dir.endsWith('vmsnap-copy-quarterly-2024-Q1') ? ['backup.copy.log'] : []
+      );
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        groupBy: 'quarter',
+        copy: true
+      });
+
+      expect(childProcessModule.spawn).toHaveBeenCalled();
+    });
+
+    test('prunes the previous period of copies', async () => {
+      vi.setSystemTime(new Date('2024-03-20T10:00:00Z'));
+      generalModule.fileExists.mockResolvedValue(true);
+
+      await performBackup({
+        domains: 'test-domain',
+        output: '/backup',
+        groupBy: 'month',
+        prune: true,
+        copy: true
+      });
+
+      expect(fsModule.rm).toHaveBeenCalledWith(
+        `/backup${sep}test-domain${sep}vmsnap-copy-monthly-2024-02`,
+        { recursive: true, force: true }
+      );
     });
   });
 

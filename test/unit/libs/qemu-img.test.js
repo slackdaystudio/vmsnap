@@ -22,7 +22,10 @@ vi.mock('../../../libs/general.js', () => ({
 
 vi.mock('../../../libs/virsh.js', () => ({
   CHECKPOINT_REGEX: /^virtnbdbackup\.[0-9]*$/,
-  fetchAllDisks: vi.fn()
+  fetchAllDisks: vi.fn(),
+  fetchBlockNodes: vi.fn(),
+  isDomainActive: vi.fn(),
+  removeBitmapFromRunningDomain: vi.fn()
 }));
 
 describe('qemu-img.js', () => {
@@ -33,6 +36,7 @@ describe('qemu-img.js', () => {
     vmSnapModule = await import('../../../vmsnap.js');
     generalModule = await import('../../../libs/general.js');
     virshModule = await import('../../../libs/virsh.js');
+    virshModule.isDomainActive.mockResolvedValue(false);
   });
 
   describe('constants', () => {
@@ -114,10 +118,10 @@ describe('qemu-img.js', () => {
       });
 
       expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
-        'qemu-img info /var/lib/libvirt/images/vm1.qcow2 --output=json'
+        'qemu-img info -U /var/lib/libvirt/images/vm1.qcow2 --output=json'
       );
       expect(vmSnapModule.asyncExec).toHaveBeenCalledWith(
-        'qemu-img info /var/lib/libvirt/images/vm1-data.qcow2 --output=json'
+        'qemu-img info -U /var/lib/libvirt/images/vm1-data.qcow2 --output=json'
       );
     });
 
@@ -250,6 +254,75 @@ describe('qemu-img.js', () => {
   });
 
   describe('cleanupBitmaps', () => {
+    const runningDiskInfo = {
+      'virtual-size': 10737418240,
+      'actual-size': 5368709120,
+      'format': 'qcow2',
+      'format-specific': {
+        'data': {
+          'bitmaps': [{ name: 'virtnbdbackup.0' }]
+        }
+      }
+    };
+
+    // What qemu-img sees for a running domain: its bitmaps are still in memory
+    const runningDiskWithoutBitmaps = {
+      ...runningDiskInfo,
+      'format-specific': { 'data': {} }
+    };
+
+    test('removes bitmaps through QEMU when the domain is running', async () => {
+      virshModule.isDomainActive.mockResolvedValue(true);
+      virshModule.fetchAllDisks.mockResolvedValue(
+        new Map([['vda', '/var/lib/libvirt/images/vm1.qcow2']])
+      );
+      // Bitmaps of a running domain come from QEMU, not the image
+      virshModule.fetchBlockNodes.mockResolvedValue(
+        new Map([
+          [
+            '/var/lib/libvirt/images/vm1.qcow2',
+            { node: 'libvirt-1-format', bitmaps: [{ name: 'virtnbdbackup.0' }] }
+          ]
+        ])
+      );
+      generalModule.findKeyByValue.mockReturnValue('vda');
+      vmSnapModule.asyncExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(runningDiskWithoutBitmaps)
+      });
+
+      await cleanupBitmaps('test-domain');
+
+      expect(virshModule.removeBitmapFromRunningDomain).toHaveBeenCalledWith(
+        'test-domain',
+        'libvirt-1-format',
+        'virtnbdbackup.0'
+      );
+      // Only the qemu-img info call, no qemu-img bitmap --remove
+      expect(vmSnapModule.asyncExec).toHaveBeenCalledTimes(1);
+    });
+
+    test('falls back to the image and warns when QEMU cannot be queried', async () => {
+      virshModule.isDomainActive.mockResolvedValue(true);
+      virshModule.fetchAllDisks.mockResolvedValue(
+        new Map([['vda', '/var/lib/libvirt/images/vm1.qcow2']])
+      );
+      virshModule.fetchBlockNodes.mockRejectedValue(new Error('monitor unavailable'));
+      generalModule.findKeyByValue.mockReturnValue('vda');
+      vmSnapModule.asyncExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(runningDiskInfo)
+      });
+
+      await cleanupBitmaps('test-domain');
+
+      expect(virshModule.removeBitmapFromRunningDomain).not.toHaveBeenCalled();
+      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to query live bitmaps for test-domain')
+      );
+      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('no block node found for /var/lib/libvirt/images/vm1.qcow2')
+      );
+    });
+
     test('removes all valid bitmaps when no specific name given', async () => {
       const mockBitmaps = [
         {

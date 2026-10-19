@@ -69,6 +69,10 @@ export const ERR_INVALID_SCRUB_TYPE = 8;
 // Backup error, virtnbdbackup failed for one or more domains.
 export const ERR_BACKUP = 9;
 
+// GroupBy error, an invalid groupBy was given or it doesn't match the existing
+// backups of a domain.
+export const ERR_GROUPBY = 10;
+
 // A spinnner for long running tasks
 export const spinner = yoctoSpinner();
 

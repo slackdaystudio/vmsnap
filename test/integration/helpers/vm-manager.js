@@ -166,6 +166,29 @@ export class TestVM {
   }
 
   /**
+   * Get the bitmaps QEMU holds for this VM's disk while it runs.  They are
+   * only written to the image on shutdown, so qemu-img can't see them.
+   */
+  async getLiveBitmaps() {
+    const { stdout } = await execAsync(
+      getVirshCmd(`qemu-monitor-command ${this.name} '{"execute":"query-block"}'`)
+    );
+    return JSON.parse(stdout).return.flatMap((device) =>
+      (device.inserted?.['dirty-bitmaps'] || []).map((b) => b.name)
+    );
+  }
+
+  /**
+   * Delete only libvirt's metadata for a checkpoint, leaving its bitmap behind
+   * on the disk (what VMSnap 2.0.3 and earlier did)
+   */
+  async orphanCheckpoint(checkpoint) {
+    await execAsync(
+      getVirshCmd(`checkpoint-delete ${this.name} ${checkpoint} --metadata`)
+    );
+  }
+
+  /**
    * Write a block of patterned data to this VM's disk (VM must be shut off)
    */
   async writeDiskData(offset, size, pattern = '0xab') {

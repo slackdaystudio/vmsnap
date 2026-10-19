@@ -17,10 +17,13 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('fs/promises', () => ({
+  readdir: vi.fn(),
   rm: vi.fn()
 }));
 
 vi.mock('../../../vmsnap.js', () => ({
+  ERR_BACKUP: 9,
+  ERR_GROUPBY: 10,
   ERR_DOMAINS: 1,
   ERR_OUTPUT_DIR: 2,
   logger: {
@@ -79,6 +82,7 @@ describe('libnbdbackup.js edge cases', () => {
     };
 
     childProcessModule.spawn.mockReturnValue(mockSpawnChild);
+    fsModule.readdir.mockResolvedValue([]);
   });
 
   describe('uncovered backup scenarios', () => {
@@ -192,41 +196,6 @@ describe('libnbdbackup.js edge cases', () => {
   });
 
   describe('pruning edge cases', () => {
-    test('handles undefined previous backup folder during pruning', async () => {
-      // This targets line 240 in libnbdbackup.js
-      const { performBackup } = await import('../../../libs/libnbdbackup.js');
-      
-      // Set date to trigger pruning
-      vi.setSystemTime(new Date('2024-03-20T10:00:00Z'));
-      
-      generalModule.parseArrayParam.mockResolvedValue(['test-vm']);
-      virshModule.domainExists.mockResolvedValue(true);
-      generalModule.fileExists
-        .mockResolvedValueOnce(true)  // Current folder exists
-        .mockResolvedValueOnce(false); // Previous folder doesn't exist
-      
-      mockSpawnChild.on.mockImplementation((event, callback) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 10);
-        }
-      });
-
-      // Test with an invalid groupBy that returns undefined backup folder
-      await performBackup({
-        domains: 'test-vm',
-        output: '/backup',
-        raw: false,
-        groupBy: 'invalid-group',
-        prune: true
-      });
-
-      // Should skip pruning due to invalid groupBy
-      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
-        'Invalid groupBy: invalid-group.  Pruning disabled'
-      );
-      expect(fsModule.rm).not.toHaveBeenCalled();
-    });
-
     test('successfully prunes previous backup when conditions are met', async () => {
       // Test the successful pruning path including line 232 return
       const { performBackup } = await import('../../../libs/libnbdbackup.js');
@@ -271,7 +240,8 @@ describe('libnbdbackup.js edge cases', () => {
       // We can't easily test the internal function, but we can test through performBackup
       const { performBackup } = await import('../../../libs/libnbdbackup.js');
       
-      vi.setSystemTime(new Date('2024-07-20T10:00:00Z')); // Past 90 days from start of year
+      // 2024-10-15 is 109 days into the second half (which starts on day 180)
+      vi.setSystemTime(new Date('2024-10-15T10:00:00Z'));
       
       generalModule.parseArrayParam.mockResolvedValue(['test-vm']);
       virshModule.domainExists.mockResolvedValue(true);
@@ -297,37 +267,6 @@ describe('libnbdbackup.js edge cases', () => {
       expect(fsModule.rm).toHaveBeenCalled();
     });
 
-    test('falls back to monthly for invalid groupBy in backup start date', async () => {
-      // This tests line 269 - the fallback to FREQUENCY_MONTHLY
-      vi.setSystemTime(new Date('2024-03-20T10:00:00Z'));
-      
-      const { performBackup } = await import('../../../libs/libnbdbackup.js');
-      
-      generalModule.parseArrayParam.mockResolvedValue(['test-vm']);
-      virshModule.domainExists.mockResolvedValue(true);
-      generalModule.fileExists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false); // Previous folder doesn't exist
-      
-      mockSpawnChild.on.mockImplementation((event, callback) => {
-        if (event === 'close') {
-          setTimeout(() => callback(0), 10);
-        }
-      });
-
-      await performBackup({
-        domains: 'test-vm',
-        output: '/backup',
-        raw: false,
-        groupBy: 'totally-invalid',
-        prune: true
-      });
-
-      // Should log invalid groupBy warning
-      expect(vmSnapModule.logger.warn).toHaveBeenCalledWith(
-        'Invalid groupBy: totally-invalid.  Pruning disabled'
-      );
-    });
   });
 
   describe('getBackupFolder edge cases', () => {

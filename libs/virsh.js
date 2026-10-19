@@ -54,6 +54,27 @@ const isDomainRunning = async (domain) => {
   }
 };
 
+// Domain states without a QEMU process behind them
+const INACTIVE_STATES = ['shut off', 'crashed'];
+
+/**
+ * Check if a domain has a live QEMU process, i.e. it is running, paused or in
+ * any other state where QEMU holds its disks open.
+ *
+ * @param {string} domain the name of the domain
+ * @returns {Promise<boolean>} True if domain is active, false if shut off or doesn't exist
+ */
+const isDomainActive = async (domain) => {
+  const command = [...getVirshCommand(), 'domstate', domain];
+
+  try {
+    const { stdout } = await asyncExec(command.join(' '));
+    return !INACTIVE_STATES.includes(stdout.trim().toLowerCase());
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Check if a domain exists on the host system.
  *
@@ -139,22 +160,113 @@ const cleanupCheckpoints = async (domain, checkpointName = undefined) => {
       continue
     }
 
-    const command = [
-      ...getVirshCommand(),
-      'checkpoint-delete',
-      domain,
-      checkpoint,
-      '--metadata',
-    ];
-
     logger.info(`Removing checkpoint ${checkpoint} from ${domain}`);
 
-    const { stderr } = await asyncExec(command.join(' '));
+    // Delete the checkpoint along with its bitmaps.  Removing only the
+    // metadata leaves the bitmaps behind on the disk, and the next full backup
+    // then fails because its checkpoint name is already taken by a bitmap.
+    try {
+      await deleteCheckpoint(domain, checkpoint);
+    } catch (error) {
+      // libvirt can't delete checkpoints of inactive domains, and fails when
+      // the bitmap is already gone.  Either way only the metadata can go; a
+      // bitmap scrub removes anything left on the disks.
+      logger.warn(
+        `Unable to remove checkpoint ${checkpoint} with its bitmaps from ${domain}, removing metadata only (leftover bitmaps are removed by a bitmap scrub): ${error.message}`,
+      );
 
-    if (stderr) {
-      throw new Error(stderr);
+      await deleteCheckpoint(domain, checkpoint, true);
     }
   }
+};
+
+/**
+ * Deletes a checkpoint from a domain.
+ *
+ * @param {string} domain the domain to delete the checkpoint from
+ * @param {string} checkpoint the name of the checkpoint
+ * @param {boolean} metadataOnly true to only remove libvirt's metadata and
+ * leave the bitmaps on the disk
+ */
+const deleteCheckpoint = async (domain, checkpoint, metadataOnly = false) => {
+  const command = [...getVirshCommand(), 'checkpoint-delete', domain, checkpoint];
+
+  if (metadataOnly) {
+    command.push('--metadata');
+  }
+
+  const { stderr } = await asyncExec(command.join(' '));
+
+  if (stderr) {
+    throw new Error(stderr);
+  }
+};
+
+/**
+ * Sends a QMP command to the QEMU process of a running domain.
+ *
+ * @param {string} domain the running domain
+ * @param {Object} qmpCommand the QMP command to execute
+ * @returns {Promise<Object>} the parsed QMP response
+ */
+const qemuMonitorCommand = async (domain, qmpCommand) => {
+  const command = [
+    ...getVirshCommand(),
+    'qemu-monitor-command',
+    domain,
+    `'${JSON.stringify(qmpCommand)}'`,
+  ];
+
+  const { stdout, stderr } = await asyncExec(command.join(' '));
+
+  if (stderr) {
+    throw new Error(stderr);
+  }
+
+  return JSON.parse(stdout);
+};
+
+/**
+ * Finds the QEMU block node and live bitmaps of each disk image attached to a
+ * running domain.  QEMU keeps a running domain's bitmaps in memory and only
+ * writes them to the image on shutdown, so qemu-img cannot see them.
+ *
+ * @param {string} domain the running domain
+ * @returns {Promise<Map<string, {node: string, bitmaps: Array<Object>}>>} the
+ * block node and bitmaps of each disk, keyed by image path
+ */
+const fetchBlockNodes = async (domain) => {
+  const response = await qemuMonitorCommand(domain, { execute: 'query-block' });
+
+  const nodes = new Map();
+
+  for (const device of response.return || []) {
+    const inserted = device.inserted;
+
+    if (inserted?.file && inserted['node-name']) {
+      nodes.set(inserted.file, {
+        node: inserted['node-name'],
+        bitmaps: inserted['dirty-bitmaps'] || [],
+      });
+    }
+  }
+
+  return nodes;
+};
+
+/**
+ * Removes a bitmap from a disk of a running domain.  qemu-img cannot modify
+ * an image while QEMU has it open, so this goes through QEMU instead.
+ *
+ * @param {string} domain the running domain
+ * @param {string} node the block node holding the bitmap
+ * @param {string} bitmap the name of the bitmap
+ */
+const removeBitmapFromRunningDomain = async (domain, node, bitmap) => {
+  await qemuMonitorCommand(domain, {
+    execute: 'block-dirty-bitmap-remove',
+    arguments: { node, name: bitmap },
+  });
 };
 
 /**
@@ -189,8 +301,11 @@ const fetchAllDisks = async (domain) => {
 export {
   domainExists,
   isDomainRunning,
+  isDomainActive,
   fetchAllDomains,
   findCheckpoints,
   cleanupCheckpoints,
   fetchAllDisks,
+  fetchBlockNodes,
+  removeBitmapFromRunningDomain,
 };

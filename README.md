@@ -113,6 +113,8 @@ The following CLI switches are available when invoking VMSnap.
 | groupBy        | ✅     | ✅     | -      | string  | Defines how backups are grouped on disk (month, quarter, bi-annual or year)  | 
 | prune          | -      | ✅     | -      | boolean | Rotates backups by **deleting** last periods backup*                         |
 | socketfile     | -      | ✅     | -      | string  | NBD socket path (default: virtnbdbackup's `/var/tmp/virtnbdbackup.<pid>`)     |
+| copy           | -      | ✅     | -      | boolean | Takes a standalone full copy instead of an incremental backup (see below)    |
+| force          | -      | ✅     | -      | boolean | Starts a new backup chain even if existing backups use a different `groupBy` |
 | pretty         | ✅     | -      | -      | boolean | Pretty prints disk sizes (42.6 GB, 120 GB, etc)                              |
 | checkpointName | -      | -      | ✅     | string  | The name of the checkpoint to delete (no effect when scrubType=*)            |
 | scrubType      | -      | -      | ✅     | string  | The type of item to scrub (checkpoint, bitmap, both, or * for ALL)           |
@@ -204,6 +206,43 @@ on disk. Look at the table below for more information.
 
 >**Tip:** If you **do not** set the `groupBy` flag the default period is assumed
 > to be "month."
+
+### One Backup Chain Per VM
+
+Checkpoints and bitmaps belong to the VM, not to a backup folder, so a VM can
+only have one incremental backup chain at a time.  Starting a new chain (the
+first backup of a new period) deletes the VM's existing checkpoints.
+
+To protect an existing chain, VMSnap refuses to start a new one when the VM's
+backups in `--output` were made with a different `--groupBy`, and exits with
+code `10`:
+
+```sh
+# Existing bi-annual backups, but no --groupBy means monthly
+vmsnap --domains=vm1 --output=/backups --backup
+# Existing backups use a different groupBy than month: vm1 (bi-annual) ...
+```
+
+Pass the matching `--groupBy`, or `--force` if you really want to switch the VM
+to a new chain.
+
+### Standalone Copies
+
+To keep an extra copy of a VM on a different schedule, without disturbing its
+backup chain, use `--copy`.  It takes a full copy (virtnbdbackup's `copy` level)
+without creating or deleting any checkpoints, into a separate
+`vmsnap-copy-{period}` folder:
+
+```sh
+# Bi-annual incremental chain
+vmsnap --domains=vm1 --output=/backups --backup --groupBy=bi-annual
+# Plus a full copy each quarter
+vmsnap --domains=vm1 --output=/backups --backup --groupBy=quarter --copy
+```
+
+VMSnap takes one copy per period and skips the run if the current period's copy
+already exists.  `--prune` works the same way for copies as for backups.
+Offline VMs are copied without being started.
 
 ### Backup Pruning (Caution)
 
