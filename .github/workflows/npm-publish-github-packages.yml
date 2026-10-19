@@ -36,4 +36,7 @@ jobs:
       - run: npm install -g npm@11
       - run: npm ci
       - run: npm run build
-      - run: npm publish
+      # npm 11 requires an explicit tag for prerelease versions. Every release
+      # so far is a beta, so keep publishing them as "latest". Switch
+      # prereleases to "--tag beta" once stable releases exist.
+      - run: npm publish --tag latest
