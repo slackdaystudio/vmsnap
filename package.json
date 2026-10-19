@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/slackdaystudio/vmsnap.git"
+    "url": "git+https://github.com/slackdaystudio/vmsnap.git"
   },
   "publishConfig": {
     "@sentry0:registry": "https://npm.pkg.github.com"
@@ -59,7 +59,7 @@
     "*.js": "prettier --check --ignore-unknown"
   },
   "bin": {
-    "vmsnap": "./dist/vmsnap.js"
+    "vmsnap": "dist/vmsnap.js"
   },
   "files": [
     "dist",
